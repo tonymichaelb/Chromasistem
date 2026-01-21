@@ -1,0 +1,15 @@
+[Unit]
+Description=Croma - Sistema de Monitoramento de Impressora 3D
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/croma
+Environment="PATH=/home/pi/croma/venv/bin"
+ExecStart=/home/pi/croma/venv/bin/python app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

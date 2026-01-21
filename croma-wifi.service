@@ -1,0 +1,15 @@
+[Unit]
+Description=Croma WiFi Manager - Hotspot Automático
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/croma
+ExecStart=/usr/bin/python3 /home/pi/croma/wifi_manager.py monitor
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

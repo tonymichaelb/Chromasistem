@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuração Wi-Fi - Croma</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .wifi-network {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+        
+        .wifi-network:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .wifi-network.connected {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+        
+        .wifi-info {
+            flex: 1;
+        }
+        
+        .wifi-ssid {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+        
+        .wifi-details {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .wifi-signal {
+            margin-right: 15px;
+            font-size: 24px;
+        }
+        
+        .wifi-actions button {
+            margin-left: 5px;
+        }
+        
+        .current-connection {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .current-connection h3 {
+            margin: 0 0 10px 0;
+            color: #fff;
+        }
+        
+        .current-connection p {
+            color: #fff;
+            font-size: 16px;
+        }
+        
+        .hotspot-badge {
+            display: inline-block;
+            background: #FF9800;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class="dashboard-page">
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <img src="{{ url_for('static', filename='images/logo-branca.png') }}" alt="Croma Logo" class="nav-logo">
+                <span class="nav-title">Croma</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('files') }}" class="nav-link">Arquivos</a>
+                <a href="{{ url_for('wifi_page') }}" class="nav-link active">Wi-Fi</a>
+            </div>
+            <div class="nav-user">
+                <span>Bem-vindo</span>
+                <button id="logoutBtn" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="files-header">
+            <h1>📡 Configuração Wi-Fi</h1>
+            <p class="subtitle">Gerencie conexões Wi-Fi e configure redes</p>
+        </div>
+
+            <!-- Status da Conexão Atual -->
+            <div class="current-connection" id="currentConnection">
+                <h3>📡 Status da Conexão</h3>
+                <p id="connectionStatus">Carregando...</p>
+            </div>
+
+            <!-- Redes Salvas -->
+            <div class="card" style="margin-bottom: 30px;">
+                <h2>Redes Salvas</h2>
+                <div id="savedNetworks">
+                    <p style="text-align: center; color: rgba(255,255,255,0.6);">Carregando...</p>
+                </div>
+            </div>
+
+            <!-- Escanear Redes -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Redes Disponíveis</h2>
+                    <button class="btn btn-primary" onclick="scanNetworks()">
+                        🔄 Atualizar
+                    </button>
+                </div>
+                <div id="availableNetworks">
+                    <p style="text-align: center; color: rgba(255,255,255,0.6);">Clique em "Atualizar" para escanear redes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Conexão -->
+    <div id="connectModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeConnectModal()">&times;</span>
+            <h2>Conectar à Rede Wi-Fi</h2>
+            <form id="connectForm" onsubmit="connectToNetwork(event)">
+                <div class="form-group">
+                    <label>Rede:</label>
+                    <input type="text" id="connectSSID" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Senha:</label>
+                    <input type="password" id="connectPassword" placeholder="Digite a senha" required>
+                    <label style="font-size: 12px; margin-top: 5px;">
+                        <input type="checkbox" onclick="togglePassword()"> Mostrar senha
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    Conectar
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentSSID = '';
+
+        // Carregar status ao iniciar
+        window.onload = function() {
+            loadWifiStatus();
+            loadSavedNetworks();
+        };
+
+        // Carregar status da conexão
+        async function loadWifiStatus() {
+            try {
+                const response = await fetch('/api/wifi/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const status = data.status;
+                    let html = '';
+                    
+                    if (status.connected) {
+                        html = `
+                            <strong style="font-size: 20px;">${status.ssid}</strong>
+                            ${status.is_hotspot ? '<span class="hotspot-badge">HOTSPOT ATIVO</span>' : ''}
+                            <br>
+                            <span style="font-size: 14px; opacity: 0.8;">IP: ${status.ip || 'N/A'}</span>
+                        `;
+                        document.getElementById('currentConnection').style.background = 
+                            status.is_hotspot ? 'linear-gradient(135deg, #FF9800, #F57C00)' : 
+                            'linear-gradient(135deg, #4CAF50, #45a049)';
+                    } else {
+                        html = '<strong style="color: #ff5252;">Desconectado</strong>';
+                        document.getElementById('currentConnection').style.background = 
+                            'linear-gradient(135deg, #555, #666)';
+                    }
+                    
+                    document.getElementById('connectionStatus').innerHTML = html;
+                    currentSSID = status.ssid || '';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar status:', error);
+            }
+        }
+
+        // Carregar redes salvas
+        async function loadSavedNetworks() {
+            try {
+                const response = await fetch('/api/wifi/saved');
+                const data = await response.json();
+                
+                if (data.success && data.networks.length > 0) {
+                    let html = '';
+                    data.networks.forEach(network => {
+                        const isConnected = network === currentSSID;
+                        html += `
+                            <div class="wifi-network ${isConnected ? 'connected' : ''}">
+                                <div class="wifi-info">
+                                    <div class="wifi-ssid">
+                                        ${network}
+                                        ${isConnected ? '✓' : ''}
+                                    </div>
+                                    <div class="wifi-details">Rede salva</div>
+                                </div>
+                                <div class="wifi-actions">
+                                    ${!isConnected ? `<button class="btn btn-danger btn-sm" onclick="forgetNetwork('${network}')">Esquecer</button>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('savedNetworks').innerHTML = html;
+                } else {
+                    document.getElementById('savedNetworks').innerHTML = 
+                        '<p style="text-align: center; color: rgba(255,255,255,0.6);">Nenhuma rede salva</p>';
+                }
+            } catch (error) {
+                console.error('Erro ao carregar redes salvas:', error);
+            }
+        }
+
+        // Escanear redes
+        async function scanNetworks() {
+            document.getElementById('availableNetworks').innerHTML = 
+                '<p style="text-align: center;">🔄 Escaneando redes...</p>';
+            
+            try {
+                const response = await fetch('/api/wifi/scan');
+                const data = await response.json();
+                
+                if (data.success && data.networks.length > 0) {
+                    let html = '';
+                    data.networks.forEach(network => {
+                        const signalIcon = getSignalIcon(network.signal);
+                        const isConnected = network.ssid === currentSSID;
+                        const lockIcon = network.security !== 'Aberta' ? '🔒' : '';
+                        
+                        html += `
+                            <div class="wifi-network ${isConnected ? 'connected' : ''}">
+                                <div class="wifi-signal">${signalIcon}</div>
+                                <div class="wifi-info">
+                                    <div class="wifi-ssid">
+                                        ${lockIcon} ${network.ssid}
+                                        ${isConnected ? '✓' : ''}
+                                    </div>
+                                    <div class="wifi-details">
+                                        Sinal: ${network.signal}% | ${network.security}
+                                    </div>
+                                </div>
+                                <div class="wifi-actions">
+                                    ${!isConnected ? `<button class="btn btn-primary btn-sm" onclick="showConnectModal('${network.ssid}')">Conectar</button>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('availableNetworks').innerHTML = html;
+                } else {
+                    document.getElementById('availableNetworks').innerHTML = 
+                        '<p style="text-align: center; color: rgba(255,255,255,0.6);">Nenhuma rede encontrada</p>';
+                }
+            } catch (error) {
+                console.error('Erro ao escanear redes:', error);
+                document.getElementById('availableNetworks').innerHTML = 
+                    '<p style="text-align: center; color: #ff5252;">Erro ao escanear redes</p>';
+            }
+        }
+
+        function getSignalIcon(signal) {
+            if (signal >= 75) return '📶';
+            if (signal >= 50) return '📶';
+            if (signal >= 25) return '📶';
+            return '📶';
+        }
+
+        function showConnectModal(ssid) {
+            document.getElementById('connectSSID').value = ssid;
+            document.getElementById('connectPassword').value = '';
+            document.getElementById('connectModal').style.display = 'block';
+        }
+
+        function closeConnectModal() {
+            document.getElementById('connectModal').style.display = 'none';
+        }
+
+        function togglePassword() {
+            const input = document.getElementById('connectPassword');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        async function connectToNetwork(event) {
+            event.preventDefault();
+            
+            const ssid = document.getElementById('connectSSID').value;
+            const password = document.getElementById('connectPassword').value;
+            
+            const btn = event.target.querySelector('button');
+            btn.disabled = true;
+            btn.textContent = 'Conectando...';
+            
+            try {
+                const response = await fetch('/api/wifi/connect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ssid, password})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Conectado com sucesso!');
+                    closeConnectModal();
+                    setTimeout(() => {
+                        loadWifiStatus();
+                        loadSavedNetworks();
+                    }, 2000);
+                } else {
+                    alert('Erro ao conectar: ' + data.message);
+                }
+            } catch (error) {
+                alert('Erro ao conectar: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Conectar';
+            }
+        }
+
+        async function forgetNetwork(ssid) {
+            if (!confirm(`Deseja remover a rede "${ssid}"?`)) return;
+            
+            try {
+                const response = await fetch('/api/wifi/forget', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ssid})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Rede removida com sucesso!');
+                    loadSavedNetworks();
+                } else {
+                    alert('Erro ao remover rede: ' + data.message);
+                }
+            } catch (error) {
+                alert('Erro ao remover rede: ' + error.message);
+            }
+        }
+
+        // Fechar modal ao clicar fora
+        window.onclick = function(event) {
+            const modal = document.getElementById('connectModal');
+            if (event.target == modal) {
+                closeConnectModal();
+            }
+        }
+
+        // Atualizar status a cada 10 segundos
+        setInterval(loadWifiStatus, 10000);
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async function() {
+            const response = await fetch('/api/logout');
+            if (response.ok) {
+                window.location.href = '/login';
+            }
+        });
+    </script>
+</body>
+</html>

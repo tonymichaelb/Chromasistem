@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Croma - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dashboard-page">
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <img src="{{ url_for('static', filename='images/logo-branca.png') }}" alt="Croma Logo" class="nav-logo">
+                <span class="nav-title">Croma</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
+                <a href="{{ url_for('files') }}" class="nav-link">Arquivos</a>
+                <a href="{{ url_for('wifi_page') }}" class="nav-link">Wi-Fi</a>
+            </div>
+            <div class="nav-user">
+                <span>Bem-vindo, <strong>{{ username }}</strong></span>
+                <button id="logoutBtn" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="dashboard-container">
+        <div class="dashboard-grid">
+            <!-- Status da Impressora -->
+            <div class="card status-card">
+                <h2>Status da Impressora</h2>
+                <div class="status-info">
+                    <div class="status-item">
+                        <span class="status-label">Estado:</span>
+                        <span id="printerState" class="status-value badge">Carregando...</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Conexão:</span>
+                        <span id="connectionStatus" class="status-value badge">Verificando...</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">
+                            <span id="filamentIcon">🧵</span> Filamento:
+                        </span>
+                        <span id="filamentStatus" class="status-value badge">Verificando...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Temperatura -->
+            <div class="card temperature-card">
+                <h2>Temperatura</h2>
+                <div class="temp-grid">
+                    <div class="temp-item">
+                        <div class="temp-icon">🌡️</div>
+                        <div class="temp-info">
+                            <div class="temp-label">Bico</div>
+                            <div class="temp-value">
+                                <span id="nozzleTemp">--</span>°C / 
+                                <span id="nozzleTarget">--</span>°C
+                            </div>
+                        </div>
+                    </div>
+                    <div class="temp-item">
+                        <div class="temp-icon">🔥</div>
+                        <div class="temp-info">
+                            <div class="temp-label">Mesa</div>
+                            <div class="temp-value">
+                                <span id="bedTemp">--</span>°C / 
+                                <span id="bedTarget">--</span>°C
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Progresso da Impressão -->
+            <div class="card progress-card">
+                <h2>Progresso da Impressão</h2>
+                <div class="progress-info">
+                    <div class="progress-filename">
+                        <strong>Arquivo:</strong> <span id="filename">Nenhum arquivo</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+                        <span id="progressPercent" class="progress-text">0%</span>
+                    </div>
+                    <div class="time-info">
+                        <div class="time-item">
+                            <span class="time-label">Tempo Decorrido:</span>
+                            <span id="timeElapsed">00:00:00</span>
+                        </div>
+                        <div class="time-item">
+                            <span class="time-label">Tempo Restante:</span>
+                            <span id="timeRemaining">00:00:00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Controles -->
+            <div class="card controls-card">
+                <h2>Controles de Impressão</h2>
+                <div class="controls-grid">
+                    <button id="startBtn" class="btn btn-success btn-control">
+                        ▶️ Iniciar
+                    </button>
+                    <button id="pauseBtn" class="btn btn-warning btn-control">
+                        ⏸️ Pausar
+                    </button>
+                    <button id="resumeBtn" class="btn btn-info btn-control">
+                        ▶️ Retomar
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger btn-control">
+                        ⏹️ Parar
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Arquivos G-Code Recentes -->
+            <div class="card files-card">
+                <div class="card-header-flex">
+                    <h2>📁 Arquivos G-Code Recentes</h2>
+                    <a href="{{ url_for('files') }}" class="btn btn-info btn-sm">Ver Todos</a>
+                </div>
+                
+                {% if recent_files %}
+                <div class="files-list">
+                    {% for file in recent_files %}
+                    <div class="file-item">
+                        <div class="gcode-icon">
+                            {% if file.thumbnail %}
+                            <img src="{{ url_for('static', filename=file.thumbnail) }}" alt="{{ file.name }}" class="thumbnail-preview">
+                            {% else %}
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M14 2V8H20" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <text x="12" y="16" font-family="Arial" font-size="6" fill="#3b82f6" text-anchor="middle" font-weight="bold">G</text>
+                            </svg>
+                            {% endif %}
+                        </div>
+                        <div class="file-item-info">
+                            <div class="file-item-name">{{ file.name }}</div>
+                            <div class="file-item-meta">
+                                <span>{{ (file.size / 1024) | round(1) }} KB</span>
+                                <span>🖨️ {{ file.print_count }}x</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-success btn-xs" onclick="printFileFromDashboard({{ file.id }}, '{{ file.name }}')">▶️</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="no-files-message">
+                    <p>📂 Nenhum arquivo G-Code ainda</p>
+                    <a href="{{ url_for('files') }}" class="btn btn-primary">Fazer Upload</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <script>
+        let updateInterval;
+        
+        // Atualizar status da impressora
+        async function updatePrinterStatus() {
+            try {
+                const response = await fetch('/api/printer/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const status = data.status;
+                    
+                    // Atualizar estado
+                    const stateElement = document.getElementById('printerState');
+                    stateElement.textContent = status.state === 'printing' ? 'Imprimindo' : 
+                                               status.state === 'paused' ? 'Pausado' : 
+                                               status.state === 'idle' ? 'Ocioso' : 'Parado';
+                    stateElement.className = 'status-value badge badge-' + status.state;
+                    
+                    // Atualizar conexão
+                    const connElement = document.getElementById('connectionStatus');
+                    connElement.textContent = status.connected ? 'Conectado' : 'Desconectado';
+                    connElement.className = 'status-value badge ' + (status.connected ? 'badge-success' : 'badge-error');
+                    
+                    // Atualizar temperaturas
+                    document.getElementById('nozzleTemp').textContent = status.temperature.nozzle;
+                    document.getElementById('nozzleTarget').textContent = status.temperature.target_nozzle;
+                    document.getElementById('bedTemp').textContent = status.temperature.bed;
+                    document.getElementById('bedTarget').textContent = status.temperature.target_bed;
+                    
+                    // Atualizar progresso
+                    document.getElementById('filename').textContent = status.filename || 'Nenhum arquivo';
+                    document.getElementById('progressBar').style.width = status.progress + '%';
+                    document.getElementById('progressPercent').textContent = status.progress.toFixed(1) + '%';
+                    document.getElementById('timeElapsed').textContent = status.time_elapsed || '00:00:00';
+                    document.getElementById('timeRemaining').textContent = status.time_remaining || '00:00:00';
+                    
+                    // Atualizar status do filamento
+                    if (status.filament) {
+                        const filamentStatus = document.getElementById('filamentStatus');
+                        const filamentIcon = document.getElementById('filamentIcon');
+                        
+                        if (status.filament.sensor_enabled) {
+                            if (status.filament.has_filament) {
+                                filamentStatus.textContent = 'OK';
+                                filamentStatus.className = 'status-value badge badge-success';
+                                filamentIcon.textContent = '🧵';
+                            } else {
+                                filamentStatus.textContent = 'SEM FILAMENTO!';
+                                filamentStatus.className = 'status-value badge badge-error';
+                                filamentIcon.textContent = '⚠️';
+                            }
+                        } else {
+                            filamentStatus.textContent = 'Sensor desabilitado';
+                            filamentStatus.className = 'status-value badge';
+                            filamentIcon.textContent = '🧵';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar status:', error);
+            }
+        }
+        
+        // Mostrar notificação
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification notification-' + type + ' show';
+            
+            setTimeout(() => {
+                notification.className = 'notification';
+            }, 3000);
+        }
+        
+        // Controles da impressora
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/printer/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: 'modelo.gcode' })
+                });
+                const data = await response.json();
+                showNotification(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showNotification('Erro ao iniciar impressão', 'error');
+            }
+        });
+        
+        document.getElementById('pauseBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/printer/pause', { method: 'POST' });
+                const data = await response.json();
+                showNotification(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showNotification('Erro ao pausar impressão', 'error');
+            }
+        });
+        
+        document.getElementById('resumeBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/printer/resume', { method: 'POST' });
+                const data = await response.json();
+                showNotification(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showNotification('Erro ao retomar impressão', 'error');
+            }
+        });
+        
+        document.getElementById('stopBtn').addEventListener('click', async () => {
+            if (confirm('Tem certeza que deseja parar a impressão?')) {
+                try {
+                    const response = await fetch('/api/printer/stop', { method: 'POST' });
+                    const data = await response.json();
+                    showNotification(data.message, data.success ? 'success' : 'error');
+                } catch (error) {
+                    showNotification('Erro ao parar impressão', 'error');
+                }
+            }
+        });
+        
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+            }
+        });
+        
+        // Imprimir arquivo da dashboard
+        async function printFileFromDashboard(fileId, fileName) {
+            if (!confirm(`Iniciar impressão de "${fileName}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/files/print/${fileId}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    // Recarregar a página após 2 segundos para atualizar os dados
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showNotification(data.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Erro ao iniciar impressão', 'error');
+            }
+        }
+        
+        // Iniciar atualização automática
+        updatePrinterStatus();
+        updateInterval = setInterval(updatePrinterStatus, 2000);
+    </script>
+</body>
+</html>

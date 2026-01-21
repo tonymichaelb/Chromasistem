@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Croma - Arquivos G-Code</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dashboard-page">
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <img src="{{ url_for('static', filename='images/logo-branca.png') }}" alt="Croma Logo" class="nav-logo">
+                <span class="nav-title">Croma</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('files') }}" class="nav-link active">Arquivos</a>
+                <a href="{{ url_for('wifi_page') }}" class="nav-link">Wi-Fi</a>
+            </div>
+            <div class="nav-user">
+                <span>Bem-vindo, <strong>{{ username }}</strong></span>
+                <button id="logoutBtn" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="dashboard-container">
+        <div class="files-header">
+            <h1>📁 Gerenciador de Arquivos G-Code</h1>
+            <p class="subtitle">Faça upload, gerencie e imprima seus arquivos G-Code</p>
+        </div>
+        
+        <div class="card upload-card">
+            <h2>📤 Enviar Arquivo G-Code</h2>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📂</div>
+                <p>Arraste e solte seu arquivo G-Code aqui</p>
+                <p class="upload-hint">ou</p>
+                <input type="file" id="fileInput" accept=".gcode,.gco,.g" style="display: none;">
+                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    Selecionar Arquivo
+                </button>
+                <p class="upload-info">Formatos aceitos: .gcode, .gco, .g (máx. 100MB)</p>
+            </div>
+            <div id="uploadProgress" class="upload-progress" style="display: none;">
+                <div class="progress-bar-container">
+                    <div id="uploadProgressBar" class="progress-bar"></div>
+                </div>
+                <p id="uploadStatus">Enviando arquivo...</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>📋 Meus Arquivos G-Code</h2>
+            <div class="files-toolbar">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="🔍 Buscar arquivo...">
+                </div>
+                <button class="btn btn-info" onclick="loadFiles()">🔄 Atualizar</button>
+            </div>
+            
+            <div id="filesContainer" class="files-grid">
+                <p class="loading">Carregando arquivos...</p>
+            </div>
+        </div>
+        
+        <!-- Instruções de integração OrcaSlicer -->
+        <div class="card integration-card">
+            <h2>🔗 Integração com OrcaSlicer</h2>
+            <p>Configure o OrcaSlicer para enviar arquivos diretamente para o Croma:</p>
+            
+            <div class="integration-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Abra as Configurações do OrcaSlicer</h3>
+                        <p>Vá em <strong>Preferences → Network</strong></p>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Configure o Servidor</h3>
+                        <div class="code-block">
+                            <strong>URL do Servidor:</strong>
+                            <code id="serverUrl">http://localhost:8080/api/files/upload</code>
+                            <button class="btn-copy" onclick="copyToClipboard('serverUrl')">📋 Copiar</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Token de Autenticação (em breve)</h3>
+                        <p>Por enquanto, faça login no navegador antes de enviar</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <!-- Modal de confirmação -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <h3>⚠️ Confirmar Exclusão</h3>
+            <p>Tem certeza que deseja excluir este arquivo?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancelar</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Excluir</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let deleteFileId = null;
+        
+        // Carregar arquivos
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files/list');
+                const data = await response.json();
+                
+                const container = document.getElementById('filesContainer');
+                
+                if (!data.success || data.files.length === 0) {
+                    container.innerHTML = '<p class="no-files">📂 Nenhum arquivo encontrado. Faça upload do seu primeiro G-Code!</p>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                data.files.forEach(file => {
+                    const fileCard = createFileCard(file);
+                    container.appendChild(fileCard);
+                });
+            } catch (error) {
+                console.error('Erro ao carregar arquivos:', error);
+                showNotification('Erro ao carregar arquivos', 'error');
+            }
+        }
+        
+        // Criar card de arquivo
+        function createFileCard(file) {
+            const card = document.createElement('div');
+            card.className = 'file-card';
+            
+            const fileSize = formatFileSize(file.size);
+            const uploadDate = new Date(file.uploaded).toLocaleString('pt-BR');
+            const lastPrinted = file.last_printed ? new Date(file.last_printed).toLocaleString('pt-BR') : 'Nunca';
+            
+            // Informações de metadados
+            let metadataHtml = '';
+            if (file.print_time || file.filament_used || file.filament_type) {
+                metadataHtml = '<div class="file-metadata">';
+                
+                if (file.print_time) {
+                    metadataHtml += `<span class="metadata-item">⏱️ ${file.print_time}</span>`;
+                }
+                
+                if (file.filament_used) {
+                    metadataHtml += `<span class="metadata-item">🧵 ${file.filament_used}g`;
+                    if (file.filament_type) {
+                        metadataHtml += ` (${file.filament_type})`;
+                    }
+                    metadataHtml += `</span>`;
+                } else if (file.filament_type) {
+                    metadataHtml += `<span class="metadata-item">🧵 ${file.filament_type}</span>`;
+                }
+                
+                if (file.layer_height) {
+                    metadataHtml += `<span class="metadata-item">📏 ${file.layer_height}mm</span>`;
+                }
+                
+                if (file.infill != null) {
+                    metadataHtml += `<span class="metadata-item">🔲 ${file.infill}%</span>`;
+                }
+                
+                if (file.nozzle_temp) {
+                    metadataHtml += `<span class="metadata-item">🌡️ Bico: ${file.nozzle_temp}°C</span>`;
+                }
+                
+                if (file.bed_temp) {
+                    metadataHtml += `<span class="metadata-item">🌡️ Mesa: ${file.bed_temp}°C</span>`;
+                }
+                
+                metadataHtml += '</div>';
+            }
+            
+            card.innerHTML = `
+                <div class="file-icon">
+                    ${file.thumbnail ? 
+                        `<img src="/static/${file.thumbnail}" alt="${file.name}" class="thumbnail-preview-large" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">` +
+                        `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:none;">
+                            <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 2V8H20" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <text x="12" y="16" font-family="Arial" font-size="6" fill="#3b82f6" text-anchor="middle" font-weight="bold">G</text>
+                        </svg>`
+                        :
+                        `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 2V8H20" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <text x="12" y="16" font-family="Arial" font-size="6" fill="#3b82f6" text-anchor="middle" font-weight="bold">G</text>
+                        </svg>`
+                    }
+                </div>
+                <div class="file-info">
+                    <h3 class="file-name">${file.name}</h3>
+                    ${metadataHtml}
+                    <div class="file-meta">
+                        <span>📦 ${fileSize}</span>
+                        <span>📅 ${uploadDate}</span>
+                        <span>🖨️ ${file.print_count}x impresso</span>
+                    </div>
+                    <div class="file-meta">
+                        <span>⏱️ Última impressão: ${lastPrinted}</span>
+                    </div>
+                </div>
+                <div class="file-actions">
+                    <button class="btn btn-success btn-sm" onclick="printFile(${file.id}, '${file.name}')">
+                        ▶️ Imprimir
+                    </button>
+                    <button class="btn btn-info btn-sm" onclick="downloadFile(${file.id})">
+                        ⬇️ Baixar
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteFile(${file.id})">
+                        🗑️ Excluir
+                    </button>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        // Formatar tamanho do arquivo
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        // Upload de arquivo
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            await uploadFile(file);
+        });
+        
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            
+            const file = e.dataTransfer.files[0];
+            if (file) await uploadFile(file);
+        });
+        
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const progressDiv = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('uploadProgressBar');
+            const statusText = document.getElementById('uploadStatus');
+            
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '0%';
+            
+            try {
+                const response = await fetch('/api/files/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    progressBar.style.width = '100%';
+                    statusText.textContent = 'Upload concluído!';
+                    showNotification('Arquivo enviado com sucesso!', 'success');
+                    
+                    setTimeout(() => {
+                        progressDiv.style.display = 'none';
+                        document.getElementById('fileInput').value = '';
+                        loadFiles();
+                    }, 2000);
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                progressDiv.style.display = 'none';
+                showNotification('Erro ao enviar arquivo: ' + error.message, 'error');
+            }
+        }
+        
+        // Imprimir arquivo
+        async function printFile(fileId, fileName) {
+            if (!confirm(`Iniciar impressão de "${fileName}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/files/print/${fileId}`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    loadFiles();
+                } else {
+                    showNotification(data.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Erro ao iniciar impressão', 'error');
+            }
+        }
+        
+        // Download arquivo
+        function downloadFile(fileId) {
+            window.location.href = `/api/files/download/${fileId}`;
+        }
+        
+        // Deletar arquivo
+        function deleteFile(fileId) {
+            deleteFileId = fileId;
+            document.getElementById('deleteModal').style.display = 'flex';
+        }
+        
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+            deleteFileId = null;
+        }
+        
+        async function confirmDelete() {
+            if (!deleteFileId) return;
+            
+            try {
+                const response = await fetch(`/api/files/delete/${deleteFileId}`, { method: 'DELETE' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Arquivo excluído com sucesso', 'success');
+                    loadFiles();
+                } else {
+                    showNotification(data.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Erro ao excluir arquivo', 'error');
+            }
+            
+            closeDeleteModal();
+        }
+        
+        // Busca
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const fileCards = document.querySelectorAll('.file-card');
+            
+            fileCards.forEach(card => {
+                const fileName = card.querySelector('.file-name').textContent.toLowerCase();
+                card.style.display = fileName.includes(searchTerm) ? 'flex' : 'none';
+            });
+        });
+        
+        // Copiar para clipboard
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            navigator.clipboard.writeText(element.textContent);
+            showNotification('URL copiada!', 'success');
+        }
+        
+        // Mostrar notificação
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification notification-' + type + ' show';
+            
+            setTimeout(() => {
+                notification.className = 'notification';
+            }, 3000);
+        }
+        
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+            }
+        });
+        
+        // Carregar arquivos ao iniciar
+        loadFiles();
+    </script>
+</body>
+</html>
