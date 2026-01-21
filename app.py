@@ -608,6 +608,12 @@ def files():
         return redirect(url_for('login'))
     return render_template('files.html', username=session.get('username'))
 
+@app.route('/terminal')
+def terminal():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('terminal.html', username=session.get('username'))
+
 # API de autenticação
 @app.route('/api/login', methods=['POST'])
 def api_login():
@@ -781,6 +787,25 @@ def printer_start():
     # Comando para iniciar impressão
     # Em produção: iniciar impressão do arquivo G-code
     return jsonify({'success': True, 'message': f'Impressão iniciada: {filename}'})
+
+@app.route('/api/printer/gcode', methods=['POST'])
+def send_gcode_api():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    data = request.get_json()
+    command = data.get('command', '').strip()
+    
+    if not command:
+        return jsonify({'success': False, 'message': 'Comando vazio'}), 400
+    
+    # Enviar comando para impressora
+    response = send_gcode(command)
+    
+    if response is not None:
+        return jsonify({'success': True, 'response': response})
+    else:
+        return jsonify({'success': False, 'message': 'Sem resposta da impressora'}), 500
 
 # API de Gerenciamento de Arquivos G-code
 @app.route('/api/files/list', methods=['GET'])

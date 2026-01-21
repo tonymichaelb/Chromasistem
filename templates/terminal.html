@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Croma - Terminal & Controles</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="dashboard-page">
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <img src="{{ url_for('static', filename='images/logo-branca.png') }}" alt="Croma Logo" class="nav-logo">
+                <span class="nav-title">Croma</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('files') }}" class="nav-link">Arquivos</a>
+                <a href="{{ url_for('terminal') }}" class="nav-link active">Terminal</a>
+                <a href="{{ url_for('wifi_page') }}" class="nav-link">Wi-Fi</a>
+            </div>
+            <div class="nav-user">
+                <span>Bem-vindo, <strong>{{ username }}</strong></span>
+                <button id="logoutBtn" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="dashboard-container">
+        <div class="terminal-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            
+            <!-- Controle de Temperatura -->
+            <div class="card">
+                <h2>🌡️ Controle de Temperatura</h2>
+                
+                <div style="margin-bottom: 20px;">
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">Bico (Hotend)</h3>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="nozzleTemp" placeholder="Temp (°C)" 
+                               min="0" max="300" value="210" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <button onclick="setNozzleTemp()" class="btn btn-primary">Definir</button>
+                        <button onclick="setNozzleTemp(0)" class="btn btn-secondary">Off</button>
+                    </div>
+                    <div style="margin-top: 5px; font-size: 14px; color: #666;">
+                        Atual: <span id="currentNozzle">--</span>°C / Target: <span id="targetNozzle">--</span>°C
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">Mesa (Bed)</h3>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="bedTemp" placeholder="Temp (°C)" 
+                               min="0" max="120" value="60" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                        <button onclick="setBedTemp()" class="btn btn-primary">Definir</button>
+                        <button onclick="setBedTemp(0)" class="btn btn-secondary">Off</button>
+                    </div>
+                    <div style="margin-top: 5px; font-size: 14px; color: #666;">
+                        Atual: <span id="currentBed">--</span>°C / Target: <span id="targetBed">--</span>°C
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">Presets</h3>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="setPreset(210, 60)" class="btn btn-info btn-sm">PLA (210/60)</button>
+                        <button onclick="setPreset(240, 80)" class="btn btn-info btn-sm">ABS (240/80)</button>
+                        <button onclick="setPreset(230, 85)" class="btn btn-info btn-sm">PETG (230/85)</button>
+                        <button onclick="setPreset(220, 60)" class="btn btn-info btn-sm">TPU (220/60)</button>
+                        <button onclick="setPreset(0, 0)" class="btn btn-danger btn-sm">Desligar Tudo</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Gráfico de Temperatura -->
+            <div class="card">
+                <h2>📊 Temperatura em Tempo Real</h2>
+                <canvas id="tempChart" style="max-height: 300px;"></canvas>
+            </div>
+            
+            <!-- Controle de Movimento -->
+            <div class="card">
+                <h2>🎮 Controle de Movimento</h2>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Distância:</label>
+                    <div style="display: flex; gap: 5px;">
+                        <button onclick="setJogDistance(0.1)" class="btn btn-sm" id="jog-0.1">0.1mm</button>
+                        <button onclick="setJogDistance(1)" class="btn btn-sm" id="jog-1">1mm</button>
+                        <button onclick="setJogDistance(10)" class="btn btn-sm btn-primary" id="jog-10">10mm</button>
+                        <button onclick="setJogDistance(100)" class="btn btn-sm" id="jog-100">100mm</button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">Eixos X/Y</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; max-width: 200px; margin: 0 auto;">
+                        <div></div>
+                        <button onclick="jogAxis('Y', jogDistance)" class="btn btn-secondary">↑ Y+</button>
+                        <div></div>
+                        <button onclick="jogAxis('X', -jogDistance)" class="btn btn-secondary">← X-</button>
+                        <button onclick="homeAxis('XY')" class="btn btn-info">🏠 Home</button>
+                        <button onclick="jogAxis('X', jogDistance)" class="btn btn-secondary">X+ →</button>
+                        <div></div>
+                        <button onclick="jogAxis('Y', -jogDistance)" class="btn btn-secondary">↓ Y-</button>
+                        <div></div>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div>
+                        <h3 style="font-size: 16px; margin-bottom: 10px;">Eixo Z</h3>
+                        <button onclick="jogAxis('Z', jogDistance)" class="btn btn-secondary" style="width: 100%; margin-bottom: 5px;">↑ Z+</button>
+                        <button onclick="homeAxis('Z')" class="btn btn-info" style="width: 100%; margin-bottom: 5px;">🏠 Home Z</button>
+                        <button onclick="jogAxis('Z', -jogDistance)" class="btn btn-secondary" style="width: 100%;">↓ Z-</button>
+                    </div>
+                    
+                    <div>
+                        <h3 style="font-size: 16px; margin-bottom: 10px;">Extrusora</h3>
+                        <button onclick="extrudeFilament(jogDistance)" class="btn btn-success" style="width: 100%; margin-bottom: 5px;">↑ Extrudar</button>
+                        <button onclick="preheatExtruder()" class="btn btn-warning" style="width: 100%; margin-bottom: 5px;">🔥 Pre-aquecer</button>
+                        <button onclick="extrudeFilament(-jogDistance)" class="btn btn-danger" style="width: 100%;">↓ Retrair</button>
+                    </div>
+                </div>
+                
+                <button onclick="homeAll()" class="btn btn-primary" style="width: 100%;">🏠 Home All (X, Y, Z)</button>
+            </div>
+            
+            <!-- Terminal G-code -->
+            <div class="card">
+                <h2>⌨️ Terminal G-code</h2>
+                
+                <div id="terminalOutput" style="
+                    background: #1e1e1e;
+                    color: #00ff00;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 15px;
+                    height: 300px;
+                    overflow-y: auto;
+                    border-radius: 5px;
+                    margin-bottom: 10px;
+                ">
+                    <div style="color: #888;">Terminal G-code pronto. Digite comandos abaixo...</div>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="gcodeInput" placeholder="Digite comando G-code (ex: M105)" 
+                           style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace;">
+                    <button onclick="sendGcode()" class="btn btn-primary">Enviar</button>
+                    <button onclick="clearTerminal()" class="btn btn-secondary">Limpar</button>
+                </div>
+                
+                <div style="margin-top: 10px;">
+                    <h3 style="font-size: 14px; margin-bottom: 5px;">Comandos Rápidos:</h3>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <button onclick="quickCommand('M105')" class="btn btn-sm btn-info">M105 (Temp)</button>
+                        <button onclick="quickCommand('M114')" class="btn btn-sm btn-info">M114 (Pos)</button>
+                        <button onclick="quickCommand('M115')" class="btn btn-sm btn-info">M115 (Info)</button>
+                        <button onclick="quickCommand('M503')" class="btn btn-sm btn-info">M503 (Config)</button>
+                        <button onclick="quickCommand('M119')" class="btn btn-sm btn-info">M119 (Endstops)</button>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <script>
+        let jogDistance = 10;
+        let tempChart;
+        let tempData = {
+            labels: [],
+            nozzle: [],
+            bed: [],
+            targetNozzle: [],
+            targetBed: []
+        };
+        
+        // Inicializar gráfico
+        function initTempChart() {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: tempData.labels,
+                    datasets: [
+                        {
+                            label: 'Bico Atual',
+                            data: tempData.nozzle,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Bico Target',
+                            data: tempData.targetNozzle,
+                            borderColor: '#ef4444',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            tension: 0
+                        },
+                        {
+                            label: 'Mesa Atual',
+                            data: tempData.bed,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Mesa Target',
+                            data: tempData.targetBed,
+                            borderColor: '#3b82f6',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 300,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            }
+                        },
+                        x: {
+                            display: false
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    animation: {
+                        duration: 0
+                    }
+                }
+            });
+        }
+        
+        // Atualizar gráfico
+        function updateTempChart(status) {
+            const now = new Date().toLocaleTimeString();
+            tempData.labels.push(now);
+            tempData.nozzle.push(status.temperature.nozzle);
+            tempData.bed.push(status.temperature.bed);
+            tempData.targetNozzle.push(status.temperature.target_nozzle);
+            tempData.targetBed.push(status.temperature.target_bed);
+            
+            // Manter apenas últimos 50 pontos
+            if (tempData.labels.length > 50) {
+                tempData.labels.shift();
+                tempData.nozzle.shift();
+                tempData.bed.shift();
+                tempData.targetNozzle.shift();
+                tempData.targetBed.shift();
+            }
+            
+            tempChart.update();
+        }
+        
+        // Atualizar status
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/printer/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const status = data.status;
+                    document.getElementById('currentNozzle').textContent = status.temperature.nozzle;
+                    document.getElementById('targetNozzle').textContent = status.temperature.target_nozzle;
+                    document.getElementById('currentBed').textContent = status.temperature.bed;
+                    document.getElementById('targetBed').textContent = status.temperature.target_bed;
+                    
+                    updateTempChart(status);
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar status:', error);
+            }
+        }
+        
+        // Controle de temperatura
+        async function setNozzleTemp(temp) {
+            if (temp === undefined) temp = document.getElementById('nozzleTemp').value;
+            await sendGcodeCommand(`M104 S${temp}`);
+            showNotification(`Bico: ${temp}°C`, 'success');
+        }
+        
+        async function setBedTemp(temp) {
+            if (temp === undefined) temp = document.getElementById('bedTemp').value;
+            await sendGcodeCommand(`M140 S${temp}`);
+            showNotification(`Mesa: ${temp}°C`, 'success');
+        }
+        
+        async function setPreset(nozzle, bed) {
+            await sendGcodeCommand(`M104 S${nozzle}`);
+            await sendGcodeCommand(`M140 S${bed}`);
+            showNotification(`Preset: Bico ${nozzle}°C, Mesa ${bed}°C`, 'success');
+        }
+        
+        // Controle de movimento
+        function setJogDistance(dist) {
+            jogDistance = dist;
+            document.querySelectorAll('[id^="jog-"]').forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-sm');
+            });
+            document.getElementById(`jog-${dist}`).classList.add('btn-primary');
+        }
+        
+        async function jogAxis(axis, distance) {
+            await sendGcodeCommand(`G91`); // Modo relativo
+            await sendGcodeCommand(`G0 ${axis}${distance} F3000`);
+            await sendGcodeCommand(`G90`); // Modo absoluto
+            showNotification(`Moveu ${axis} ${distance}mm`, 'info');
+        }
+        
+        async function homeAxis(axis) {
+            await sendGcodeCommand(`G28 ${axis}`);
+            showNotification(`Home ${axis}`, 'success');
+        }
+        
+        async function homeAll() {
+            await sendGcodeCommand('G28');
+            showNotification('Home All concluído', 'success');
+        }
+        
+        async function extrudeFilament(distance) {
+            await sendGcodeCommand('G91'); // Modo relativo
+            await sendGcodeCommand(`G1 E${distance} F300`);
+            await sendGcodeCommand('G90'); // Modo absoluto
+            const action = distance > 0 ? 'Extrudou' : 'Retraiu';
+            showNotification(`${action} ${Math.abs(distance)}mm`, 'info');
+        }
+        
+        async function preheatExtruder() {
+            await sendGcodeCommand('M104 S210');
+            showNotification('Pre-aquecendo extrusora para 210°C', 'success');
+        }
+        
+        // Terminal G-code
+        function addToTerminal(text, type = 'output') {
+            const terminal = document.getElementById('terminalOutput');
+            const line = document.createElement('div');
+            line.style.marginBottom = '5px';
+            
+            if (type === 'command') {
+                line.style.color = '#ffff00';
+                line.textContent = '> ' + text;
+            } else if (type === 'error') {
+                line.style.color = '#ff0000';
+                line.textContent = 'ERROR: ' + text;
+            } else {
+                line.style.color = '#00ff00';
+                line.textContent = '< ' + text;
+            }
+            
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        async function sendGcode() {
+            const input = document.getElementById('gcodeInput');
+            const command = input.value.trim();
+            if (!command) return;
+            
+            addToTerminal(command, 'command');
+            input.value = '';
+            
+            await sendGcodeCommand(command);
+        }
+        
+        async function quickCommand(cmd) {
+            addToTerminal(cmd, 'command');
+            await sendGcodeCommand(cmd);
+        }
+        
+        async function sendGcodeCommand(command) {
+            try {
+                const response = await fetch('/api/printer/gcode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: command })
+                });
+                const data = await response.json();
+                
+                if (data.success && data.response) {
+                    addToTerminal(data.response, 'output');
+                } else if (!data.success) {
+                    addToTerminal(data.message || 'Sem resposta', 'error');
+                }
+            } catch (error) {
+                addToTerminal('Erro ao enviar comando', 'error');
+            }
+        }
+        
+        function clearTerminal() {
+            const terminal = document.getElementById('terminalOutput');
+            terminal.innerHTML = '<div style="color: #888;">Terminal limpo.</div>';
+        }
+        
+        // Enter para enviar comando
+        document.getElementById('gcodeInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendGcode();
+        });
+        
+        // Notificação
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification notification-' + type + ' show';
+            setTimeout(() => {
+                notification.className = 'notification';
+            }, 3000);
+        }
+        
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+            }
+        });
+        
+        // Inicializar
+        initTempChart();
+        updateStatus();
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html>
