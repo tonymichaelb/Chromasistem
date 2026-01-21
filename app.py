@@ -689,6 +689,24 @@ def printer_resume():
     else:
         return jsonify({'success': False, 'message': 'Erro ao retomar impressão'}), 500
 
+@app.route('/api/printer/connect', methods=['POST'])
+def printer_connect():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    if connect_printer():
+        return jsonify({'success': True, 'message': 'Impressora conectada com sucesso'})
+    else:
+        return jsonify({'success': False, 'message': 'Falha ao conectar à impressora'}), 500
+
+@app.route('/api/printer/disconnect', methods=['POST'])
+def printer_disconnect():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    disconnect_printer()
+    return jsonify({'success': True, 'message': 'Impressora desconectada'})
+
 @app.route('/api/printer/stop', methods=['POST'])
 def printer_stop():
     if 'user_id' not in session:

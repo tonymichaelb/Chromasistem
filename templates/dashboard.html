@@ -46,6 +46,10 @@
                         <span id="filamentStatus" class="status-value badge">Verificando...</span>
                     </div>
                 </div>
+                <div class="connection-controls" style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button id="connectBtn" class="btn btn-success" style="flex: 1;">🔌 Conectar</button>
+                    <button id="disconnectBtn" class="btn btn-secondary" style="flex: 1;">🔌 Desconectar</button>
+                </div>
             </div>
             
             <!-- Temperatura -->
@@ -281,6 +285,45 @@
                     showNotification(data.message, data.success ? 'success' : 'error');
                 } catch (error) {
                     showNotification('Erro ao parar impressão', 'error');
+                }
+            }
+        });
+        
+        // Conectar impressora
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                const btn = document.getElementById('connectBtn');
+                btn.disabled = true;
+                btn.textContent = '🔄 Conectando...';
+                
+                const response = await fetch('/api/printer/connect', { method: 'POST' });
+                const data = await response.json();
+                showNotification(data.message, data.success ? 'success' : 'error');
+                
+                btn.disabled = false;
+                btn.textContent = '🔌 Conectar';
+                
+                // Atualizar status imediatamente
+                updatePrinterStatus();
+            } catch (error) {
+                showNotification('Erro ao conectar impressora', 'error');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('connectBtn').textContent = '🔌 Conectar';
+            }
+        });
+        
+        // Desconectar impressora
+        document.getElementById('disconnectBtn').addEventListener('click', async () => {
+            if (confirm('Desconectar a impressora?')) {
+                try {
+                    const response = await fetch('/api/printer/disconnect', { method: 'POST' });
+                    const data = await response.json();
+                    showNotification(data.message, data.success ? 'success' : 'error');
+                    
+                    // Atualizar status imediatamente
+                    updatePrinterStatus();
+                } catch (error) {
+                    showNotification('Erro ao desconectar impressora', 'error');
                 }
             }
         });
