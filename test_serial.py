@@ -72,18 +72,38 @@ def check_permissions(port):
     print("\n✓ Permissões OK!")
     return True
 
-def test_connection(port, baudrate):
-    """Testa conexão com a impressora"""
+def test_multiple_baudrates(port):
+    """Testa múltiplos baudrates na porta"""
+    baudrates = [115200, 250000, 230400, 57600, 38400, 19200, 9600]
+    
     print("\n" + "="*60)
-    print(f"🔌 TESTANDO CONEXÃO")
+    print(f"🔍 TESTANDO MÚLTIPLOS BAUDRATES EM {port}")
     print("="*60)
-    print(f"Porta:     {port}")
-    print(f"Baudrate:  {baudrate}")
-    print(f"Timeout:   {SERIAL_TIMEOUT}s")
-    print()
+    
+    for baudrate in baudrates:
+        print(f"\n→ Testando {baudrate} baud...")
+        if test_connection(port, baudrate, quick=True):
+            print(f"\n✅ SUCESSO COM {baudrate} BAUD!")
+            print(f"   Atualize app.py com: SERIAL_BAUDRATE = {baudrate}")
+            return baudrate
+    
+    print("\n❌ Nenhum baudrate funcionou")
+    return None
+
+def test_connection(port, baudrate, quick=False):
+    """Testa conexão com a impressora"""
+    if not quick:
+        print("\n" + "="*60)
+        print(f"🔌 TESTANDO CONEXÃO")
+        print("="*60)
+        print(f"Porta:     {port}")
+        print(f"Baudrate:  {baudrate}")
+        print(f"Timeout:   {SERIAL_TIMEOUT}s")
+        print()
     
     try:
-        print("⏳ Abrindo porta serial...")
+        if not quick:
+            print("⏳ Abrindo porta serial...")
         ser = serial.Serial(
             port=port,
             baudrate=baudrate,
@@ -97,18 +117,31 @@ def test_connection(port, baudrate):
             dsrdtr=False
         )
         
-        print("✓ Porta aberta com sucesso!")
-        print(f"  - Porta: {ser.port}")
-        print(f"  - Baudrate: {ser.baudrate}")
-        print(f"  - Aberta: {ser.is_open}")
+        if not quick:
+            print("✓ Porta aberta com sucesso!")
+            print(f"  - Porta: {ser.port}")
+            print(f"  - Baudrate: {ser.baudrate}")
+            print(f"  - Aberta: {ser.is_open}")
         
         # Aguardar inicialização
-        print("\n⏳ Aguardando inicialização da impressora (2s)...")
-        time.sleep(2)
+        if not quick:
+            print("\n⏳ Aguardando inicialização da impressora (2s)...")
+        time.sleep(2 if not quick else 1)
         
         # Limpar buffer
         ser.reset_input_buffer()
         ser.reset_output_buffer()
+        
+        # Teste rápido - apenas M115
+        if quick:
+            ser.write(b'M115\n')
+            time.sleep(0.5)
+            if ser.in_waiting > 0:
+                response = ser.readline().decode('utf-8', errors='ignore').strip()
+                ser.close()
+                return bool(response and ('ok' in response.lower() or 'firmware' in response.lower()))
+            ser.close()
+            return False
         
         # Comandos de teste
         test_commands = [
@@ -199,16 +232,52 @@ def main():
     
     # Verificar permissões da porta configurada
     if os.path.exists(SERIAL_PORT):
-        check_permissions(SERIAL_PORT)
+        if not check_permissions(SERIAL_PORT):
+            print("\n💡 Tente executar com sudo:")
+            print("   sudo python3 test_serial.py\n")
     else:
         print(f"\n⚠️  Porta configurada {SERIAL_PORT} não existe!")
         if ports:
-            print(f"\n💡 Sugestão: Use uma das portas listadas acima")
-            print(f"   Edite app.py e altere SERIAL_PORT para a porta correta\n")
+            print(f"\n💡 Testando automaticamente todas as portas disponíveis...\n")
+            
+            # Testar cada porta
+            for port in ports:
+                if not os.access(port, os.R_OK | os.W_OK):
+                    print(f"⏭️  Pulando {port} (sem permissão)")
+                    continue
+                    
+                print(f"\n🔍 Testando {port}...")
+                baudrate = test_multiple_baudrates(port)
+                if baudrate:
+                    print(f"\n✅ CONFIGURAÇÃO ENCONTRADA!")
+                    print(f"   Porta: {port}")
+                    print(f"   Baudrate: {baudrate}")
+                    print(f"\n📝 Atualize app.py:")
+                    print(f"   SERIAL_PORT = '{port}'")
+                    print(f"   SERIAL_BAUDRATE = {baudrate}\n")
+                    return
+            
+            print("\n❌ Nenhuma porta funcionou")
+            print("\n💡 Verifique:")
+            print("   1. Impressora está ligada?")
+            print("   2. Cabo USB conectado?")
+            print("   3. Firmware Marlin instalado?")
+            print("   4. Tente: sudo python3 test_serial.py\n")
         return
     
-    # Testar conexão
-    test_connection(SERIAL_PORT, SERIAL_BAUDRATE)
+    # Testar conexão com a porta configurada
+    print(f"\n🔍 Testando {SERIAL_PORT} com múltiplos baudrates...")
+    baudrate = test_multiple_baudrates(SERIAL_PORT)
+    
+    if baudrate:
+        print(f"\n✅ SUCESSO!")
+        if baudrate != SERIAL_BAUDRATE:
+            print(f"\n📝 ATENÇÃO: Baudrate correto é {baudrate}, não {SERIAL_BAUDRATE}")
+            print(f"   Atualize app.py: SERIAL_BAUDRATE = {baudrate}\n")
+    else:
+        print("\n❌ Falha na conexão")
+        print("\n💡 Tente:")
+        print("   sudo python3 test_serial.py\n")
 
 if __name__ == '__main__':
     try:
