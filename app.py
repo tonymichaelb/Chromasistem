@@ -65,9 +65,16 @@ def setup_filament_sensor():
     """Inicializa o sensor de filamento"""
     if not GPIO_AVAILABLE:
         print("⚠️ GPIO não disponível - sensor de filamento não configurado")
+        filament_status['sensor_enabled'] = False
         return False
     
     try:
+        # Limpar configurações anteriores do GPIO
+        try:
+            GPIO.cleanup()
+        except:
+            pass
+        
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(FILAMENT_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         
@@ -76,10 +83,13 @@ def setup_filament_sensor():
                             callback=filament_sensor_callback, 
                             bouncetime=300)
         
+        filament_status['sensor_enabled'] = True
         print(f"✓ Sensor de filamento configurado no GPIO{FILAMENT_SENSOR_PIN}")
         return True
     except Exception as e:
-        print(f"✗ Erro ao configurar sensor de filamento: {e}")
+        print(f"⚠️ Erro ao configurar sensor de filamento: {e}")
+        print("   O servidor continuará funcionando sem sensor de filamento")
+        filament_status['sensor_enabled'] = False
         return False
 
 def filament_sensor_callback(channel):
@@ -1050,12 +1060,22 @@ if __name__ == '__main__':
     init_db()
     
     # Configurar sensor de filamento
+    print("\n" + "="*50)
+    print("🖨️  Chromasistem - Sistema de Monitoramento 3D")
+    print("="*50)
     setup_filament_sensor()
+    print("="*50 + "\n")
     
     # Iniciar servidor
     try:
-        app.run(host='0.0.0.0', port=80, debug=True)
+        app.run(host='0.0.0.0', port=80, debug=True, use_reloader=False)
+    except KeyboardInterrupt:
+        print("\n⏹️  Servidor interrompido pelo usuário")
     finally:
         # Limpar GPIO ao encerrar
         if GPIO_AVAILABLE:
-            GPIO.cleanup()
+            try:
+                GPIO.cleanup()
+                print("✓ GPIO limpo")
+            except:
+                pass
