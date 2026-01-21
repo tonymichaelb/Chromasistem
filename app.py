@@ -43,7 +43,7 @@ app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
 # Configuração da conexão serial com a impressora
-SERIAL_PORT = '/dev/ttyUSB0'  # Porta serial padrão no Raspberry Pi (ajustar se necessário)
+SERIAL_PORT = '/dev/ttyACM0'  # Porta serial para placas Arduino/Marlin
 SERIAL_BAUDRATE = 115200
 SERIAL_TIMEOUT = 2
 
