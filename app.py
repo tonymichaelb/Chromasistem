@@ -186,18 +186,67 @@ def connect_printer():
     global printer_serial
     try:
         if printer_serial and printer_serial.is_open:
+            print(f"✓ Já conectado à impressora em {SERIAL_PORT}")
             return True
+        
+        # Verificar se a porta existe
+        import os
+        if not os.path.exists(SERIAL_PORT):
+            print(f"✗ ERRO: Porta {SERIAL_PORT} não existe!")
+            print("   Portas disponíveis:")
+            try:
+                import glob
+                ports = glob.glob('/dev/tty[AU]*')
+                for port in ports:
+                    print(f"     - {port}")
+            except:
+                pass
+            return False
+        
+        print(f"🔌 Tentando conectar à impressora...")
+        print(f"   Porta: {SERIAL_PORT}")
+        print(f"   Baudrate: {SERIAL_BAUDRATE}")
+        print(f"   Timeout: {SERIAL_TIMEOUT}s")
         
         printer_serial = serial.Serial(
             port=SERIAL_PORT,
             baudrate=SERIAL_BAUDRATE,
-            timeout=SERIAL_TIMEOUT
+            timeout=SERIAL_TIMEOUT,
+            write_timeout=SERIAL_TIMEOUT,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            xonxoff=False,
+            rtscts=False,
+            dsrdtr=False
         )
+        
+        print(f"   Aguardando inicialização da impressora...")
         time.sleep(2)  # Aguardar inicialização
+        
+        # Tentar enviar comando M115 para verificar conexão
+        try:
+            printer_serial.write(b'M115\n')
+            time.sleep(0.5)
+            response = printer_serial.readline().decode('utf-8', errors='ignore').strip()
+            if response:
+                print(f"   Resposta da impressora: {response[:50]}...")
+        except Exception as e:
+            print(f"   Aviso ao verificar resposta: {e}")
+        
         print(f"✓ Conectado à impressora em {SERIAL_PORT} @ {SERIAL_BAUDRATE} baud")
         return True
+    except serial.SerialException as e:
+        print(f"✗ ERRO Serial: {e}")
+        if 'Permission denied' in str(e):
+            print("   SOLUÇÃO: Execute 'sudo usermod -a -G dialout $USER' e faça logout/login")
+            print("   OU execute o servidor com sudo")
+        elif 'Device or resource busy' in str(e):
+            print("   SOLUÇÃO: Outra aplicação está usando a porta. Feche-a primeiro.")
+        printer_serial = None
+        return False
     except Exception as e:
-        print(f"✗ Erro ao conectar impressora: {e}")
+        print(f"✗ Erro inesperado ao conectar impressora: {type(e).__name__}: {e}")
         printer_serial = None
         return False
 
