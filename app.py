@@ -291,6 +291,8 @@ def send_gcode(command, wait_for_ok=True, timeout=None):
                     timeout = 120
                 elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
                     timeout = 300
+                elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
+                    timeout = 10
                 else:
                     timeout = 5  # Timeout padrão aumentado
             
@@ -1124,7 +1126,9 @@ def print_file(file_id):
                     response = send_gcode(line)
                     
                     # Aguardar mais após comandos importantes
-                    if cmd_upper.startswith(('G28', 'G29', 'T0', 'T1')):
+                    if cmd_upper.startswith(('M109', 'M190')):
+                        time.sleep(2.0)  # Aquecimento completo - aguardar estabilização
+                    elif cmd_upper.startswith(('G28', 'G29', 'T')):
                         time.sleep(0.5)  # Dar tempo para impressora processar
                     
                     if response is None:
