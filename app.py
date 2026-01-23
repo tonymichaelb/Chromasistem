@@ -377,12 +377,6 @@ def get_printer_status_serial():
             'target_bed_temp': 0,
             'target_nozzle_temp': 0
         }
-            'progress': 0,
-            'bed_temp': 0,
-            'nozzle_temp': 0,
-            'target_bed_temp': 0,
-            'target_nozzle_temp': 0
-        }
 
 # Verificar extensão de arquivo permitida
 def allowed_file(filename):
