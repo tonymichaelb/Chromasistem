@@ -310,24 +310,22 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                         timeout = 300
                     elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
                         timeout = 10
+                    elif cmd.startswith(('G0 ', 'G1 ')):
+                        timeout = 1  # Movimentos rápidos - timeout curto
                     else:
-                        timeout = 5  # Timeout padrão aumentado
+                        timeout = 3  # Timeout padrão
                 
-                # Para comandos de movimento (G0/G1), enviar direto sem limpar buffer
-                # Isso maximiza a velocidade para curvas/círculos
-                if not wait_for_ok:
-                    # Modo rápido: apenas write + flush, sem limpar buffer ou aguardar
-                    printer_serial.write(command.encode())
-                    printer_serial.flush()
-                    return 'ok'
-                
-                # Para outros comandos, limpar buffer antes de enviar
-                printer_serial.reset_input_buffer()
-                time.sleep(0.01)  # Aguardar limpeza do buffer (reduzido)
+                # Para comandos de movimento (G0/G1), não limpar buffer - mais rápido
+                if not cmd.startswith(('G0 ', 'G1 ')):
+                    printer_serial.reset_input_buffer()
+                    time.sleep(0.01)  # Aguardar limpeza do buffer
                 
                 # Enviar comando
                 printer_serial.write(command.encode())
                 printer_serial.flush()
+                
+                if not wait_for_ok:
+                    return 'ok'
                 
                 # Ler resposta (pode ter múltiplas linhas)
                 responses = []
@@ -1178,11 +1176,8 @@ def print_file(file_id):
                     elif cmd_upper.startswith('T'):
                         print(f"  🔧 Selecionando extrusora: {line}")
                     
-                    # Para comandos de movimento (G0/G1), não esperar "ok" - usar buffer da impressora
-                    wait_ok = not cmd_upper.startswith(('G0 ', 'G1 ', 'G0\n', 'G1\n'))
-                    
-                    # Enviar comando
-                    response = send_gcode(line, wait_for_ok=wait_ok)
+                    # Enviar comando (todos esperam ok para não perder comandos)
+                    response = send_gcode(line)
                     
                     # Aguardar apenas após comandos críticos
                     # G0/G1 não têm delay - impressora gerencia buffer
@@ -1192,7 +1187,7 @@ def print_file(file_id):
                         time.sleep(0.5)  # Comandos críticos
                     # Sem delay para G0/G1 e outros - máxima velocidade
                     
-                    if response is None and wait_ok:  # Só verificar erro se esperou "ok"
+                    if response is None:
                         print(f"✗ Erro ao enviar linha {line_count}: {line}")
                         # Marcar como erro
                         conn_local = sqlite3.connect(DB_NAME)
