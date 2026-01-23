@@ -879,12 +879,25 @@ def printer_stop():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
+    # Atualizar banco de dados - marcar impressão como cancelada
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE print_jobs 
+        SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP
+        WHERE status = 'printing'
+    ''')
+    conn.commit()
+    conn.close()
+    
     # Parar impressão via serial
     send_gcode('M108')  # Break e cancelar aquecimento
     send_gcode('M104 S0')  # Desligar aquecedor do bico
     send_gcode('M140 S0')  # Desligar aquecedor da mesa
     send_gcode('M107')  # Desligar ventilador
     send_gcode('G28 X Y')  # Home X e Y
+    
+    print("✗ Impressão cancelada pelo usuário")
     
     return jsonify({'success': True, 'message': 'Impressão parada'})
 
@@ -1081,6 +1094,14 @@ def print_file(file_id):
         if not connect_printer():
             conn.close()
             return jsonify({'success': False, 'message': 'Impressora não conectada'}), 500
+    
+    # Limpar impressões antigas que ficaram travadas como 'printing'
+    cursor.execute('''
+        UPDATE print_jobs 
+        SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP
+        WHERE status = 'printing'
+    ''')
+    conn.commit()
     
     # Verificar se arquivo existe
     if not os.path.exists(filepath):
