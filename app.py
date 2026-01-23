@@ -313,16 +313,21 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     else:
                         timeout = 5  # Timeout padrão aumentado
                 
-                # Limpar buffer de entrada antes de enviar
+                # Para comandos de movimento (G0/G1), enviar direto sem limpar buffer
+                # Isso maximiza a velocidade para curvas/círculos
+                if not wait_for_ok:
+                    # Modo rápido: apenas write + flush, sem limpar buffer ou aguardar
+                    printer_serial.write(command.encode())
+                    printer_serial.flush()
+                    return 'ok'
+                
+                # Para outros comandos, limpar buffer antes de enviar
                 printer_serial.reset_input_buffer()
-                time.sleep(0.05)  # Aguardar limpeza do buffer
+                time.sleep(0.01)  # Aguardar limpeza do buffer (reduzido)
                 
                 # Enviar comando
                 printer_serial.write(command.encode())
                 printer_serial.flush()
-                
-                if not wait_for_ok:
-                    return 'ok'
                 
                 # Ler resposta (pode ter múltiplas linhas)
                 responses = []
