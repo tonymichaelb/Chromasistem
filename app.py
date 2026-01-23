@@ -1015,6 +1015,14 @@ def print_file(file_id):
         SET last_printed = CURRENT_TIMESTAMP, print_count = print_count + 1
         WHERE id = ?
     ''', (file_id,))
+    
+    # Criar registro de impressão
+    cursor.execute('''
+        INSERT INTO print_jobs (user_id, filename, status, progress, started_at)
+        VALUES (?, ?, 'printing', 0, CURRENT_TIMESTAMP)
+    ''', (session['user_id'], original_name))
+    
+    job_id = cursor.lastrowid
     conn.commit()
     conn.close()
     
@@ -1031,14 +1039,24 @@ def print_file(file_id):
             send_gcode('G90', wait_for_ok=False)       # Modo absoluto
             send_gcode('M82', wait_for_ok=False)       # Extrusor absoluto
             
+            # Contar total de linhas primeiro
+            with open(filepath, 'r') as f:
+                total_lines = sum(1 for line in f if line.split(';')[0].strip())
+            
+            print(f"  Total de comandos: {total_lines}")
+            
+            # Processar arquivo
             with open(filepath, 'r') as f:
                 line_count = 0
+                lines_sent = 0
+                
                 for line in f:
                     # Remover comentários e espaços
                     line = line.split(';')[0].strip()
                     
                     # Pular linhas vazias
                     if not line:
+                        line_count += 1
                         continue
                     
                     # Enviar comando
@@ -1046,21 +1064,66 @@ def print_file(file_id):
                     
                     if response is None:
                         print(f"✗ Erro ao enviar linha {line_count}: {line}")
+                        # Marcar como erro
+                        conn_local = sqlite3.connect(DB_NAME)
+                        cursor_local = conn_local.cursor()
+                        cursor_local.execute('''
+                            UPDATE print_jobs 
+                            SET status = 'error', completed_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        ''', (job_id,))
+                        conn_local.commit()
+                        conn_local.close()
                         break
                     
                     line_count += 1
+                    lines_sent += 1
                     
-                    # Log a cada 100 linhas
-                    if line_count % 100 == 0:
-                        print(f"  Linha {line_count} enviada...")
+                    # Atualizar progresso a cada 50 linhas
+                    if lines_sent % 50 == 0:
+                        progress = (lines_sent / total_lines) * 100
+                        conn_local = sqlite3.connect(DB_NAME)
+                        cursor_local = conn_local.cursor()
+                        cursor_local.execute('''
+                            UPDATE print_jobs 
+                            SET progress = ?
+                            WHERE id = ?
+                        ''', (progress, job_id))
+                        conn_local.commit()
+                        conn_local.close()
+                        print(f"  Progresso: {progress:.1f}% ({lines_sent}/{total_lines})")
                     
                     # Pequena pausa para não saturar
                     time.sleep(0.01)
             
-            print(f"✓ Impressão concluída: {line_count} linhas enviadas")
+            # Marcar como concluído
+            conn_local = sqlite3.connect(DB_NAME)
+            cursor_local = conn_local.cursor()
+            cursor_local.execute('''
+                UPDATE print_jobs 
+                SET status = 'completed', progress = 100, completed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (job_id,))
+            conn_local.commit()
+            conn_local.close()
+            
+            print(f"✓ Impressão concluída: {lines_sent} linhas enviadas")
             
         except Exception as e:
             print(f"✗ Erro durante impressão: {e}")
+            # Marcar como erro
+            try:
+                conn_local = sqlite3.connect(DB_NAME)
+                cursor_local = conn_local.cursor()
+                cursor_local.execute('''
+                    UPDATE print_jobs 
+                    SET status = 'error', completed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (job_id,))
+                conn_local.commit()
+                conn_local.close()
+            except:
+                pass
     
     # Iniciar thread
     thread = threading.Thread(target=print_gcode_file, daemon=True)
