@@ -738,9 +738,6 @@ def printer_status():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    # Tentar obter status real da impressora
-    status_data = get_printer_status_serial()
-    
     # Buscar informações da impressão atual no banco
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -754,14 +751,32 @@ def printer_status():
     current_job = cursor.fetchone()
     conn.close()
     
-    # Verificar status do sensor de filamento
-    filament_info = check_filament_sensor()
+    # Se houver impressão ativa, NÃO consultar serial para evitar conflitos
+    if current_job:
+        is_printing = True
+        current_progress = current_job[1] if current_job else 0
+        current_filename = current_job[0] if current_job else ''
+        
+        status = {
+            'connected': printer_serial and printer_serial.is_open,
+            'temperature': {
+                'bed': 0,  # Não consultar durante impressão
+                'nozzle': 0,
+                'target_bed': 0,
+                'target_nozzle': 0
+            },
+            'state': 'printing',
+            'progress': current_progress,
+            'filename': current_filename,
+            'time_elapsed': '00:00:00',
+            'time_remaining': '00:00:00',
+            'filament': check_filament_sensor()
+        }
+        return jsonify({'success': True, 'status': status})
     
-    # Determinar estado e progresso
-    # Se há job no banco com status 'printing', usar dados do banco
-    is_printing = current_job is not None
-    current_progress = current_job[1] if current_job else 0
-    current_filename = current_job[0] if current_job else ''
+    # Se NÃO houver impressão, consultar status normal
+    status_data = get_printer_status_serial()
+    filament_info = check_filament_sensor()
     
     status = {
         'connected': status_data['connected'],
@@ -771,12 +786,12 @@ def printer_status():
             'target_bed': status_data['target_bed_temp'],
             'target_nozzle': status_data['target_nozzle_temp']
         },
-        'state': 'printing' if is_printing else 'idle',
-        'progress': current_progress,
-        'filename': current_filename,
-        'time_elapsed': '00:00:00',  # Calcular baseado no tempo de início
-        'time_remaining': '00:00:00',  # Estimar baseado no progresso
-        'filament': filament_info  # Adicionar info do sensor de filamento
+        'state': 'idle',
+        'progress': 0,
+        'filename': '',
+        'time_elapsed': '00:00:00',
+        'time_remaining': '00:00:00',
+        'filament': filament_info
     }
     return jsonify({'success': True, 'status': status})
 
