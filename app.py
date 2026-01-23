@@ -312,6 +312,8 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                         timeout = 300
                     elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
                         timeout = 10
+                    elif cmd.startswith(('G0 ', 'G1 ')) and ' E' in cmd:
+                        timeout = 5  # Comandos de extrusão (retração/extrusão) - timeout maior
                     elif cmd.startswith(('G0 ', 'G1 ')):
                         timeout = 1  # Movimentos rápidos - timeout curto
                     else:
