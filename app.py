@@ -292,7 +292,7 @@ def send_gcode(command, wait_for_ok=True, timeout=None):
                 elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
                     timeout = 300
                 else:
-                    timeout = 2  # Timeout padrão
+                    timeout = 5  # Timeout padrão aumentado
             
             # Limpar buffer de entrada antes de enviar
             printer_serial.reset_input_buffer()
@@ -1079,11 +1079,11 @@ def print_file(file_id):
             
             # Comandos de preparação (sem M110 que pode causar reset)
             send_gcode('G21')  # Unidades em mm
-            time.sleep(0.1)
+            time.sleep(0.2)
             send_gcode('G90')  # Modo absoluto
-            time.sleep(0.1)
+            time.sleep(0.2)
             send_gcode('M82')  # Extrusor absoluto
-            time.sleep(0.5)
+            time.sleep(1.0)
             
             print("  Comandos de inicialização enviados")
             
@@ -1117,9 +1117,15 @@ def print_file(file_id):
                         print("  🔥 Aquecendo bico e aguardando temperatura...")
                     elif cmd_upper.startswith('M190'):
                         print("  🔥 Aquecendo mesa e aguardando temperatura...")
+                    elif cmd_upper.startswith('T'):
+                        print(f"  🔧 Selecionando extrusora: {line}")
                     
                     # Enviar comando
                     response = send_gcode(line)
+                    
+                    # Aguardar mais após comandos importantes
+                    if cmd_upper.startswith(('G28', 'G29', 'T0', 'T1')):
+                        time.sleep(0.5)  # Dar tempo para impressora processar
                     
                     if response is None:
                         print(f"✗ Erro ao enviar linha {line_count}: {line}")
@@ -1153,7 +1159,7 @@ def print_file(file_id):
                         print(f"  Progresso: {progress:.1f}% ({lines_sent}/{total_lines})")
                     
                     # Pequena pausa para não saturar
-                    time.sleep(0.01)
+                    time.sleep(0.05)
             
             # Marcar como concluído
             conn_local = sqlite3.connect(DB_NAME)
