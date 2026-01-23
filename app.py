@@ -263,7 +263,7 @@ def disconnect_printer():
         printer_serial = None
 
 # Enviar comando G-code para impressora
-def send_gcode(command):
+def send_gcode(command, wait_for_ok=True):
     global printer_serial
     try:
         if not printer_serial or not printer_serial.is_open:
@@ -274,11 +274,32 @@ def send_gcode(command):
         if not command.endswith('\n'):
             command += '\n'
         
-        printer_serial.write(command.encode())
+        # Limpar buffer de entrada antes de enviar
+        printer_serial.reset_input_buffer()
         
-        # Ler resposta
-        response = printer_serial.readline().decode('utf-8').strip()
-        return response
+        # Enviar comando
+        printer_serial.write(command.encode())
+        printer_serial.flush()
+        
+        if not wait_for_ok:
+            return 'ok'
+        
+        # Ler resposta (pode ter múltiplas linhas)
+        responses = []
+        start_time = time.time()
+        
+        while time.time() - start_time < 2:  # Timeout de 2 segundos
+            if printer_serial.in_waiting > 0:
+                line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
+                if line:
+                    responses.append(line)
+                    # Se recebeu 'ok', terminou
+                    if 'ok' in line.lower():
+                        break
+            else:
+                time.sleep(0.01)  # Pequena pausa para não saturar CPU
+        
+        return '\n'.join(responses) if responses else None
     except Exception as e:
         print(f"Erro ao enviar comando '{command.strip()}': {e}")
         return None
@@ -286,12 +307,6 @@ def send_gcode(command):
 # Ler status da impressora
 def get_printer_status_serial():
     try:
-        # Enviar M105 para ler temperatura
-        temp_response = send_gcode('M105')
-        
-        # Enviar M27 para ler progresso de impressão
-        progress_response = send_gcode('M27')
-        
         status = {
             'connected': printer_serial and printer_serial.is_open,
             'printing': False,
@@ -302,22 +317,41 @@ def get_printer_status_serial():
             'target_nozzle_temp': 0
         }
         
-        # Parse da temperatura (ex: "ok T:210.0 /210.0 B:60.0 /60.0")
-        if temp_response and 'T:' in temp_response:
+        if not status['connected']:
+            return status
+        
+        # Enviar M105 para ler temperatura (tentar 2 vezes)
+        temp_response = None
+        for attempt in range(2):
+            temp_response = send_gcode('M105')
+            if temp_response and 'T:' in temp_response:
+                break
+            time.sleep(0.1)
+        
+        # Parse da temperatura (ex: "ok T:210.0 /210.0 B:60.0 /60.0" ou "T:25.0 /0.0 B:24.5 /0.0")
+        if temp_response:
             try:
-                # Extrai temperatura do bico
-                t_match = re.search(r'T:(\d+\.?\d*)\s*/(\d+\.?\d*)', temp_response)
-                if t_match:
-                    status['nozzle_temp'] = float(t_match.group(1))
-                    status['target_nozzle_temp'] = float(t_match.group(2))
-                
-                # Extrai temperatura da mesa
-                b_match = re.search(r'B:(\d+\.?\d*)\s*/(\d+\.?\d*)', temp_response)
-                if b_match:
-                    status['bed_temp'] = float(b_match.group(1))
-                    status['target_bed_temp'] = float(b_match.group(2))
+                # Procurar em todas as linhas da resposta
+                for line in temp_response.split('\n'):
+                    if 'T:' in line:
+                        # Extrai temperatura do bico
+                        t_match = re.search(r'T:(\d+\.?\d*)\s*/(\d+\.?\d*)', line)
+                        if t_match:
+                            status['nozzle_temp'] = float(t_match.group(1))
+                            status['target_nozzle_temp'] = float(t_match.group(2))
+                        
+                        # Extrai temperatura da mesa
+                        b_match = re.search(r'B:(\d+\.?\d*)\s*/(\d+\.?\d*)', line)
+                        if b_match:
+                            status['bed_temp'] = float(b_match.group(1))
+                            status['target_bed_temp'] = float(b_match.group(2))
+                        break
             except Exception as e:
                 print(f"Erro ao parsear temperatura: {e}")
+                print(f"Resposta: {temp_response}")
+        
+        # Enviar M27 para ler progresso de impressão
+        progress_response = send_gcode('M27')
         
         # Parse do progresso (ex: "SD printing byte 1234/5678")
         if progress_response and 'SD printing' in progress_response:
@@ -337,6 +371,12 @@ def get_printer_status_serial():
         return {
             'connected': False,
             'printing': False,
+            'progress': 0,
+            'bed_temp': 0,
+            'nozzle_temp': 0,
+            'target_bed_temp': 0,
+            'target_nozzle_temp': 0
+        }
             'progress': 0,
             'bed_temp': 0,
             'nozzle_temp': 0,
@@ -962,6 +1002,18 @@ def print_file(file_id):
     
     filename = result[0]
     original_name = result[1]
+    filepath = os.path.join(app.config['GCODE_FOLDER'], filename)
+    
+    # Verificar se impressora está conectada
+    if not printer_serial or not printer_serial.is_open:
+        if not connect_printer():
+            conn.close()
+            return jsonify({'success': False, 'message': 'Impressora não conectada'}), 500
+    
+    # Verificar se arquivo existe
+    if not os.path.exists(filepath):
+        conn.close()
+        return jsonify({'success': False, 'message': 'Arquivo G-code não encontrado'}), 404
     
     # Atualizar contadores
     cursor.execute('''
@@ -972,13 +1024,57 @@ def print_file(file_id):
     conn.commit()
     conn.close()
     
-    # Em produção: enviar arquivo para impressora
-    filepath = os.path.join(app.config['GCODE_FOLDER'], filename)
+    # Iniciar impressão em thread separada para não bloquear
+    import threading
+    
+    def print_gcode_file():
+        try:
+            print(f"\n▶️ Iniciando impressão: {original_name}")
+            
+            # Reset e preparação
+            send_gcode('M110 N0', wait_for_ok=False)  # Reset line number
+            send_gcode('G21', wait_for_ok=False)       # Unidades em mm
+            send_gcode('G90', wait_for_ok=False)       # Modo absoluto
+            send_gcode('M82', wait_for_ok=False)       # Extrusor absoluto
+            
+            with open(filepath, 'r') as f:
+                line_count = 0
+                for line in f:
+                    # Remover comentários e espaços
+                    line = line.split(';')[0].strip()
+                    
+                    # Pular linhas vazias
+                    if not line:
+                        continue
+                    
+                    # Enviar comando
+                    response = send_gcode(line)
+                    
+                    if response is None:
+                        print(f"✗ Erro ao enviar linha {line_count}: {line}")
+                        break
+                    
+                    line_count += 1
+                    
+                    # Log a cada 100 linhas
+                    if line_count % 100 == 0:
+                        print(f"  Linha {line_count} enviada...")
+                    
+                    # Pequena pausa para não saturar
+                    time.sleep(0.01)
+            
+            print(f"✓ Impressão concluída: {line_count} linhas enviadas")
+            
+        except Exception as e:
+            print(f"✗ Erro durante impressão: {e}")
+    
+    # Iniciar thread
+    thread = threading.Thread(target=print_gcode_file, daemon=True)
+    thread.start()
     
     return jsonify({
         'success': True, 
-        'message': f'Iniciando impressão de {original_name}',
-        'filepath': filepath
+        'message': f'Iniciando impressão de {original_name}'
     })
 
 @app.route('/api/files/download/<int:file_id>', methods=['GET'])
