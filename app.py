@@ -19,9 +19,15 @@ except (ImportError, RuntimeError):
     GPIO_AVAILABLE = False
     print("⚠️ RPi.GPIO não disponível - sensor de filamento desabilitado")
 
+# Importar threading para lock
+import threading
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 CORS(app)
+
+# Lock para sincronizar acesso à porta serial
+serial_lock = threading.Lock()
 
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
@@ -265,56 +271,58 @@ def disconnect_printer():
 # Enviar comando G-code para impressora
 def send_gcode(command, wait_for_ok=True, timeout=None):
     global printer_serial
-    try:
-        if not printer_serial or not printer_serial.is_open:
-            if not connect_printer():
-                return None
-        
-        # Adicionar newline se não existir
-        if not command.endswith('\n'):
-            command += '\n'
-        
-        # Determinar timeout baseado no comando
-        if timeout is None:
-            cmd = command.strip().upper()
-            if cmd.startswith('G28'):  # Home - pode levar até 60s
-                timeout = 60
-            elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
-                timeout = 120
-            elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
-                timeout = 300
-            else:
-                timeout = 2  # Timeout padrão
-        
-        # Limpar buffer de entrada antes de enviar
-        printer_serial.reset_input_buffer()
-        
-        # Enviar comando
-        printer_serial.write(command.encode())
-        printer_serial.flush()
-        
-        if not wait_for_ok:
-            return 'ok'
-        
-        # Ler resposta (pode ter múltiplas linhas)
-        responses = []
-        start_time = time.time()
-        
-        while time.time() - start_time < timeout:
-            if printer_serial.in_waiting > 0:
-                line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
-                if line:
-                    responses.append(line)
-                    # Se recebeu 'ok', terminou
-                    if 'ok' in line.lower():
-                        break
-            else:
-                time.sleep(0.01)  # Pequena pausa para não saturar CPU
-        
-        return '\n'.join(responses) if responses else None
-    except Exception as e:
-        print(f"Erro ao enviar comando '{command.strip()}': {e}")
-        return None
+    
+    with serial_lock:  # Garantir acesso exclusivo à porta serial
+        try:
+            if not printer_serial or not printer_serial.is_open:
+                if not connect_printer():
+                    return None
+            
+            # Adicionar newline se não existir
+            if not command.endswith('\n'):
+                command += '\n'
+            
+            # Determinar timeout baseado no comando
+            if timeout is None:
+                cmd = command.strip().upper()
+                if cmd.startswith('G28'):  # Home - pode levar até 60s
+                    timeout = 60
+                elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
+                    timeout = 120
+                elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
+                    timeout = 300
+                else:
+                    timeout = 2  # Timeout padrão
+            
+            # Limpar buffer de entrada antes de enviar
+            printer_serial.reset_input_buffer()
+            
+            # Enviar comando
+            printer_serial.write(command.encode())
+            printer_serial.flush()
+            
+            if not wait_for_ok:
+                return 'ok'
+            
+            # Ler resposta (pode ter múltiplas linhas)
+            responses = []
+            start_time = time.time()
+            
+            while time.time() - start_time < timeout:
+                if printer_serial.in_waiting > 0:
+                    line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
+                    if line:
+                        responses.append(line)
+                        # Se recebeu 'ok', terminou
+                        if 'ok' in line.lower():
+                            break
+                else:
+                    time.sleep(0.01)  # Pequena pausa para não saturar CPU
+            
+            return '\n'.join(responses) if responses else None
+        except Exception as e:
+            print(f"Erro ao enviar comando '{command.strip()}': {e}")
+            return None
 
 # Ler status da impressora
 def get_printer_status_serial():
