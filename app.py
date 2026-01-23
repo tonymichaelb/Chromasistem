@@ -1173,20 +1173,21 @@ def print_file(file_id):
                     elif cmd_upper.startswith('T'):
                         print(f"  🔧 Selecionando extrusora: {line}")
                     
+                    # Para comandos de movimento (G0/G1), não esperar "ok" - usar buffer da impressora
+                    wait_ok = not cmd_upper.startswith(('G0 ', 'G1 ', 'G0\n', 'G1\n'))
+                    
                     # Enviar comando
-                    response = send_gcode(line)
+                    response = send_gcode(line, wait_for_ok=wait_ok)
                     
-                    # Aguardar mais após comandos importantes
-                    # Comandos de movimento (G0/G1) não precisam de delay - impressora tem buffer
+                    # Aguardar apenas após comandos críticos
+                    # G0/G1 não têm delay - impressora gerencia buffer
                     if cmd_upper.startswith(('M109', 'M190')):
-                        time.sleep(2.0)  # Aquecimento completo - aguardar estabilização
+                        time.sleep(2.0)  # Aquecimento completo
                     elif cmd_upper.startswith(('G28', 'G29', 'T')):
-                        time.sleep(0.5)  # Dar tempo para impressora processar
-                    elif not cmd_upper.startswith(('G0', 'G1')):
-                        time.sleep(0.01)  # Pequena pausa para comandos não-movimento
-                    # G0/G1 (movimento): sem delay - deixa buffer da impressora gerenciar
+                        time.sleep(0.5)  # Comandos críticos
+                    # Sem delay para G0/G1 e outros - máxima velocidade
                     
-                    if response is None:
+                    if response is None and wait_ok:  # Só verificar erro se esperou "ok"
                         print(f"✗ Erro ao enviar linha {line_count}: {line}")
                         # Marcar como erro
                         conn_local = sqlite3.connect(DB_NAME)
