@@ -1039,11 +1039,18 @@ def print_file(file_id):
         try:
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
-            # Reset e preparação
-            send_gcode('M110 N0', wait_for_ok=False)  # Reset line number
-            send_gcode('G21', wait_for_ok=False)       # Unidades em mm
-            send_gcode('G90', wait_for_ok=False)       # Modo absoluto
-            send_gcode('M82', wait_for_ok=False)       # Extrusor absoluto
+            # Aguardar um pouco para garantir estabilidade da conexão
+            time.sleep(1)
+            
+            # Comandos de preparação (sem M110 que pode causar reset)
+            send_gcode('G21')  # Unidades em mm
+            time.sleep(0.1)
+            send_gcode('G90')  # Modo absoluto
+            time.sleep(0.1)
+            send_gcode('M82')  # Extrusor absoluto
+            time.sleep(0.5)
+            
+            print("  Comandos de inicialização enviados")
             
             # Contar total de linhas primeiro
             with open(filepath, 'r') as f:
