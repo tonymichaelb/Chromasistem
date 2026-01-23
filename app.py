@@ -263,7 +263,7 @@ def disconnect_printer():
         printer_serial = None
 
 # Enviar comando G-code para impressora
-def send_gcode(command, wait_for_ok=True):
+def send_gcode(command, wait_for_ok=True, timeout=None):
     global printer_serial
     try:
         if not printer_serial or not printer_serial.is_open:
@@ -273,6 +273,18 @@ def send_gcode(command, wait_for_ok=True):
         # Adicionar newline se não existir
         if not command.endswith('\n'):
             command += '\n'
+        
+        # Determinar timeout baseado no comando
+        if timeout is None:
+            cmd = command.strip().upper()
+            if cmd.startswith('G28'):  # Home - pode levar até 60s
+                timeout = 60
+            elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
+                timeout = 120
+            elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
+                timeout = 300
+            else:
+                timeout = 2  # Timeout padrão
         
         # Limpar buffer de entrada antes de enviar
         printer_serial.reset_input_buffer()
@@ -288,7 +300,7 @@ def send_gcode(command, wait_for_ok=True):
         responses = []
         start_time = time.time()
         
-        while time.time() - start_time < 2:  # Timeout de 2 segundos
+        while time.time() - start_time < timeout:
             if printer_serial.in_waiting > 0:
                 line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
                 if line:
@@ -1071,6 +1083,17 @@ def print_file(file_id):
                     if not line:
                         line_count += 1
                         continue
+                    
+                    # Log para comandos importantes
+                    cmd_upper = line.upper()
+                    if cmd_upper.startswith('G28'):
+                        print("  🏠 Executando homing (G28)... pode levar até 60 segundos")
+                    elif cmd_upper.startswith('G29'):
+                        print("  📐 Executando nivelamento de mesa (G29)... pode levar até 2 minutos")
+                    elif cmd_upper.startswith('M109'):
+                        print("  🔥 Aquecendo bico e aguardando temperatura...")
+                    elif cmd_upper.startswith('M190'):
+                        print("  🔥 Aquecendo mesa e aguardando temperatura...")
                     
                     # Enviar comando
                     response = send_gcode(line)
