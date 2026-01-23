@@ -1177,10 +1177,14 @@ def print_file(file_id):
                     response = send_gcode(line)
                     
                     # Aguardar mais após comandos importantes
+                    # Comandos de movimento (G0/G1) não precisam de delay - impressora tem buffer
                     if cmd_upper.startswith(('M109', 'M190')):
                         time.sleep(2.0)  # Aquecimento completo - aguardar estabilização
                     elif cmd_upper.startswith(('G28', 'G29', 'T')):
                         time.sleep(0.5)  # Dar tempo para impressora processar
+                    elif not cmd_upper.startswith(('G0', 'G1')):
+                        time.sleep(0.01)  # Pequena pausa para comandos não-movimento
+                    # G0/G1 (movimento): sem delay - deixa buffer da impressora gerenciar
                     
                     if response is None:
                         print(f"✗ Erro ao enviar linha {line_count}: {line}")
@@ -1213,8 +1217,7 @@ def print_file(file_id):
                         conn_local.close()
                         print(f"  Progresso: {progress:.1f}% ({lines_sent}/{total_lines})")
                     
-                    # Pequena pausa para não saturar
-                    time.sleep(0.05)
+                    # NÃO adicionar delay aqui - já foi tratado acima baseado no tipo de comando
             
             # Marcar como concluído
             conn_local = sqlite3.connect(DB_NAME)
