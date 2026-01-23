@@ -268,63 +268,93 @@ def disconnect_printer():
     finally:
         printer_serial = None
 
+# Verificar se impressora está pronta (como OctoPrint)
+def check_printer_ready():
+    """Envia M115 (firmware info) e verifica se impressora responde ok"""
+    try:
+        print("  🔍 Verificando se impressora está pronta...")
+        response = send_gcode('M115', wait_for_ok=True, timeout=10)
+        if response and 'ok' in response.lower():
+            print("  ✓ Impressora pronta para imprimir")
+            return True
+        else:
+            print("  ✗ Impressora não respondeu ao M115")
+            return False
+    except Exception as e:
+        print(f"  ✗ Erro ao verificar prontidão: {e}")
+        return False
+
 # Enviar comando G-code para impressora
-def send_gcode(command, wait_for_ok=True, timeout=None):
+def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
     global printer_serial
     
     with serial_lock:  # Garantir acesso exclusivo à porta serial
-        try:
-            if not printer_serial or not printer_serial.is_open:
-                if not connect_printer():
-                    return None
-            
-            # Adicionar newline se não existir
-            if not command.endswith('\n'):
-                command += '\n'
-            
-            # Determinar timeout baseado no comando
-            if timeout is None:
-                cmd = command.strip().upper()
-                if cmd.startswith('G28'):  # Home - pode levar até 60s
-                    timeout = 60
-                elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
-                    timeout = 120
-                elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
-                    timeout = 300
-                elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
-                    timeout = 10
-                else:
-                    timeout = 5  # Timeout padrão aumentado
-            
-            # Limpar buffer de entrada antes de enviar
-            printer_serial.reset_input_buffer()
-            
-            # Enviar comando
-            printer_serial.write(command.encode())
-            printer_serial.flush()
-            
-            if not wait_for_ok:
-                return 'ok'
-            
-            # Ler resposta (pode ter múltiplas linhas)
-            responses = []
-            start_time = time.time()
-            
-            while time.time() - start_time < timeout:
-                if printer_serial.in_waiting > 0:
-                    line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
-                    if line:
-                        responses.append(line)
-                        # Se recebeu 'ok', terminou
-                        if 'ok' in line.lower():
-                            break
-                else:
-                    time.sleep(0.01)  # Pequena pausa para não saturar CPU
-            
-            return '\n'.join(responses) if responses else None
-        except Exception as e:
-            print(f"Erro ao enviar comando '{command.strip()}': {e}")
-            return None
+        for attempt in range(retries):
+            try:
+                if not printer_serial or not printer_serial.is_open:
+                    if not connect_printer():
+                        return None
+                
+                # Adicionar newline se não existir
+                if not command.endswith('\n'):
+                    command += '\n'
+                
+                # Determinar timeout baseado no comando
+                if timeout is None:
+                    cmd = command.strip().upper()
+                    if cmd.startswith('G28'):  # Home - pode levar até 60s
+                        timeout = 60
+                    elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
+                        timeout = 120
+                    elif cmd.startswith('M109') or cmd.startswith('M190'):  # Aquecimento - até 300s
+                        timeout = 300
+                    elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
+                        timeout = 10
+                    else:
+                        timeout = 5  # Timeout padrão aumentado
+                
+                # Limpar buffer de entrada antes de enviar
+                printer_serial.reset_input_buffer()
+                time.sleep(0.05)  # Aguardar limpeza do buffer
+                
+                # Enviar comando
+                printer_serial.write(command.encode())
+                printer_serial.flush()
+                
+                if not wait_for_ok:
+                    return 'ok'
+                
+                # Ler resposta (pode ter múltiplas linhas)
+                responses = []
+                start_time = time.time()
+                
+                while time.time() - start_time < timeout:
+                    if printer_serial.in_waiting > 0:
+                        line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
+                        if line:
+                            responses.append(line)
+                            # Se recebeu 'ok', terminou
+                            if 'ok' in line.lower():
+                                return '\n'.join(responses)
+                    else:
+                        time.sleep(0.01)  # Pequena pausa para não saturar CPU
+                
+                # Se chegou aqui, timeout - tentar novamente se tiver retries
+                if attempt < retries - 1:
+                    print(f"  ⚠️ Timeout ao enviar '{command.strip()}', tentando novamente ({attempt + 2}/{retries})...")
+                    time.sleep(0.5)
+                    continue
+                
+                return '\n'.join(responses) if responses else None
+            except Exception as e:
+                if attempt < retries - 1:
+                    print(f"  ⚠️ Erro ao enviar '{command.strip()}': {e}, tentando novamente ({attempt + 2}/{retries})...")
+                    time.sleep(0.5)
+                    continue
+                print(f"Erro ao enviar comando '{command.strip()}': {e}")
+                return None
+        
+        return None
 
 # Ler status da impressora
 def get_printer_status_serial():
@@ -1076,15 +1106,36 @@ def print_file(file_id):
         try:
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
+            # Verificar se impressora está pronta antes de começar
+            if not check_printer_ready():
+                print("✗ Impressão cancelada: impressora não está respondendo")
+                conn_local = sqlite3.connect(DB_NAME)
+                cursor_local = conn_local.cursor()
+                cursor_local.execute('''
+                    UPDATE print_jobs 
+                    SET status = 'error', completed_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (job_id,))
+                conn_local.commit()
+                conn_local.close()
+                return
+            
             # Aguardar um pouco para garantir estabilidade da conexão
             time.sleep(1)
             
             # Comandos de preparação (sem M110 que pode causar reset)
-            send_gcode('G21')  # Unidades em mm
+            print("  🛠️ Enviando comandos de inicialização...")
+            if not send_gcode('G21', retries=3):  # Unidades em mm
+                print("✗ Falha no G21")
+                return
             time.sleep(0.2)
-            send_gcode('G90')  # Modo absoluto
+            if not send_gcode('G90', retries=3):  # Modo absoluto
+                print("✗ Falha no G90")
+                return
             time.sleep(0.2)
-            send_gcode('M82')  # Extrusor absoluto
+            if not send_gcode('M82', retries=3):  # Extrusor absoluto
+                print("✗ Falha no M82")
+                return
             time.sleep(1.0)
             
             print("  Comandos de inicialização enviados")
