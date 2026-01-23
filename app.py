@@ -299,9 +299,11 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                 if not command.endswith('\n'):
                     command += '\n'
                 
+                # Extrair comando (sempre necessário para verificações)
+                cmd = command.strip().upper()
+                
                 # Determinar timeout baseado no comando
                 if timeout is None:
-                    cmd = command.strip().upper()
                     if cmd.startswith('G28'):  # Home - pode levar até 60s
                         timeout = 60
                     elif cmd.startswith('G29'):  # Auto bed leveling - pode levar até 120s
