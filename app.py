@@ -737,6 +737,12 @@ def printer_status():
     # Verificar status do sensor de filamento
     filament_info = check_filament_sensor()
     
+    # Determinar estado e progresso
+    # Se há job no banco com status 'printing', usar dados do banco
+    is_printing = current_job is not None
+    current_progress = current_job[1] if current_job else 0
+    current_filename = current_job[0] if current_job else ''
+    
     status = {
         'connected': status_data['connected'],
         'temperature': {
@@ -745,9 +751,9 @@ def printer_status():
             'target_bed': status_data['target_bed_temp'],
             'target_nozzle': status_data['target_nozzle_temp']
         },
-        'state': 'printing' if status_data['printing'] else 'idle',
-        'progress': status_data['progress'],
-        'filename': current_job[0] if current_job else '',
+        'state': 'printing' if is_printing else 'idle',
+        'progress': current_progress,
+        'filename': current_filename,
         'time_elapsed': '00:00:00',  # Calcular baseado no tempo de início
         'time_remaining': '00:00:00',  # Estimar baseado no progresso
         'filament': filament_info  # Adicionar info do sensor de filamento
