@@ -29,6 +29,11 @@ CORS(app)
 # Lock para sincronizar acesso à porta serial
 serial_lock = threading.Lock()
 
+# Flags de controle de impressão
+print_paused = False
+print_stopped = False
+printing_thread = None
+
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
 
@@ -1042,27 +1047,23 @@ def printer_status():
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
+    global print_paused
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    # Pausar impressão via serial (M25)
-    response = send_gcode('M25')
-    if response:
-        return jsonify({'success': True, 'message': 'Impressão pausada'})
-    else:
-        return jsonify({'success': False, 'message': 'Erro ao pausar impressão'}), 500
+    print_paused = True
+    print("⏸️ Impressão pausada pelo usuário")
+    return jsonify({'success': True, 'message': 'Impressão pausada'})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
+    global print_paused
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    # Retomar impressão via serial (M24)
-    response = send_gcode('M24')
-    if response:
-        return jsonify({'success': True, 'message': 'Impressão retomada'})
-    else:
-        return jsonify({'success': False, 'message': 'Erro ao retomar impressão'}), 500
+    print_paused = False
+    print("▶️ Impressão retomada pelo usuário")
+    return jsonify({'success': True, 'message': 'Impressão retomada'})
 
 @app.route('/api/printer/connect', methods=['POST'])
 def printer_connect():
@@ -1084,8 +1085,13 @@ def printer_disconnect():
 
 @app.route('/api/printer/stop', methods=['POST'])
 def printer_stop():
+    global print_stopped, print_paused
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    # Sinalizar parada
+    print_stopped = True
+    print_paused = False
     
     # Atualizar banco de dados - marcar impressão como cancelada
     conn = sqlite3.connect(DB_NAME)
@@ -1098,14 +1104,16 @@ def printer_stop():
     conn.commit()
     conn.close()
     
-    # Parar impressão via serial
-    send_gcode('M108')  # Break e cancelar aquecimento
+    # Parar motores e aquecedores
     send_gcode('M104 S0')  # Desligar aquecedor do bico
     send_gcode('M140 S0')  # Desligar aquecedor da mesa
-    send_gcode('M107')  # Desligar ventilador
+    send_gcode('M107')     # Desligar ventilador
+    send_gcode('G91')      # Modo relativo
+    send_gcode('G1 Z10')   # Subir Z 10mm
+    send_gcode('G90')      # Modo absoluto
     send_gcode('G28 X Y')  # Home X e Y
     
-    print("✗ Impressão cancelada pelo usuário")
+    print("✗ Impressão PARADA pelo usuário")
     
     return jsonify({'success': True, 'message': 'Impressão parada'})
 
@@ -1349,7 +1357,12 @@ def print_file(file_id):
     import threading
     
     def print_gcode_file():
+        global print_paused, print_stopped
         try:
+            # Resetar flags no início
+            print_paused = False
+            print_stopped = False
+            
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
             # Verificar se impressora está pronta antes de começar
@@ -1398,6 +1411,21 @@ def print_file(file_id):
                 lines_sent = 0
                 
                 for line in f:
+                    # Verificar se impressão foi parada
+                    if print_stopped:
+                        print("✗ Impressão PARADA pelo usuário")
+                        break
+                    
+                    # Verificar se impressão foi pausada
+                    while print_paused and not print_stopped:
+                        print("⏸️ Impressão em PAUSA...")
+                        time.sleep(1)
+                    
+                    # Se parou durante a pausa, sair
+                    if print_stopped:
+                        print("✗ Impressão PARADA durante pausa")
+                        break
+                    
                     # Remover comentários e espaços
                     line = line.split(';')[0].strip()
                     
