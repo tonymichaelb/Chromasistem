@@ -786,8 +786,6 @@ def dashboard():
             'filament_diameter': row[16],
             'max_z_height': row[17]
         })
-            'infill': row[12]
-        })
     
     conn.close()
     return render_template('dashboard.html', username=session.get('username'), recent_files=recent_files)
