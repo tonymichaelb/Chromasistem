@@ -373,23 +373,27 @@ body {
 .temp-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
+    gap: 8px;
+    padding: 12px;
     background: var(--dark-bg);
     border-radius: 8px;
+    overflow: hidden;
 }
 
 .temp-icon {
-    font-size: 32px;
+    font-size: 28px;
+    flex-shrink: 0;
 }
 
 .temp-info {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .temp-label {
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     margin-bottom: 4px;
@@ -397,12 +401,11 @@ body {
 
 .temp-value {
     color: var(--text-primary);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 120px;
 }
 
 .progress-info {
