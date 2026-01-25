@@ -781,7 +781,7 @@ def printer_status():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT filename, progress 
+        SELECT filename, progress, started_at 
         FROM print_jobs 
         WHERE status = 'printing' 
         ORDER BY started_at DESC 
@@ -790,25 +790,76 @@ def printer_status():
     current_job = cursor.fetchone()
     conn.close()
     
-    # Se houver impressão ativa, NÃO consultar serial para evitar conflitos
+    # Se houver impressão ativa, consultar temperatura (M105 é seguro) mas evitar M27
     if current_job:
         is_printing = True
         current_progress = current_job[1] if current_job else 0
         current_filename = current_job[0] if current_job else ''
+        started_at = current_job[2] if current_job else None
+        
+        # Consultar temperatura via M105 (não interfere com impressão)
+        temp_response = send_gcode('M105')
+        bed_temp = 0
+        nozzle_temp = 0
+        target_bed = 0
+        target_nozzle = 0
+        
+        if temp_response and 'T:' in temp_response:
+            try:
+                for line in temp_response.split('\n'):
+                    if 'T:' in line:
+                        t_match = re.search(r'T:(\d+\.?\d*)\s*/(\d+\.?\d*)', line)
+                        if t_match:
+                            nozzle_temp = float(t_match.group(1))
+                            target_nozzle = float(t_match.group(2))
+                        b_match = re.search(r'B:(\d+\.?\d*)\s*/(\d+\.?\d*)', line)
+                        if b_match:
+                            bed_temp = float(b_match.group(1))
+                            target_bed = float(b_match.group(2))
+                        break
+            except:
+                pass
+        
+        # Calcular tempo decorrido
+        time_elapsed = '00:00:00'
+        time_remaining = 'Calculando...'
+        if started_at:
+            try:
+                from datetime import datetime
+                start_time = datetime.strptime(started_at, '%Y-%m-%d %H:%M:%S')
+                elapsed = datetime.now() - start_time
+                hours = int(elapsed.total_seconds() // 3600)
+                minutes = int((elapsed.total_seconds() % 3600) // 60)
+                seconds = int(elapsed.total_seconds() % 60)
+                time_elapsed = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                
+                # Calcular tempo restante (estimativa)
+                if current_progress > 0:
+                    total_time = elapsed.total_seconds() / (current_progress / 100)
+                    remaining = total_time - elapsed.total_seconds()
+                    if remaining > 0:
+                        r_hours = int(remaining // 3600)
+                        r_minutes = int((remaining % 3600) // 60)
+                        r_seconds = int(remaining % 60)
+                        time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                    else:
+                        time_remaining = '00:00:00'
+            except:
+                pass
         
         status = {
             'connected': printer_serial and printer_serial.is_open,
             'temperature': {
-                'bed': 0,  # Não consultar durante impressão
-                'nozzle': 0,
-                'target_bed': 0,
-                'target_nozzle': 0
+                'bed': bed_temp,
+                'nozzle': nozzle_temp,
+                'target_bed': target_bed,
+                'target_nozzle': target_nozzle
             },
             'state': 'printing',
             'progress': current_progress,
             'filename': current_filename,
-            'time_elapsed': '00:00:00',
-            'time_remaining': '00:00:00',
+            'time_elapsed': time_elapsed,
+            'time_remaining': time_remaining,
             'filament': check_filament_sensor()
         }
         return jsonify({'success': True, 'status': status})
