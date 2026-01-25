@@ -817,15 +817,16 @@ def printer_status():
                             bed_temp = float(b_match.group(1))
                             target_bed = float(b_match.group(2))
                         break
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Erro ao parsear temperatura: {e}")
+        else:
+            print(f"⚠️ Resposta M105 vazia ou sem 'T:': {temp_response}")
         
         # Calcular tempo decorrido
         time_elapsed = '00:00:00'
         time_remaining = 'Calculando...'
         if started_at:
             try:
-                from datetime import datetime
                 start_time = datetime.strptime(started_at, '%Y-%m-%d %H:%M:%S')
                 elapsed = datetime.now() - start_time
                 hours = int(elapsed.total_seconds() // 3600)
@@ -844,8 +845,8 @@ def printer_status():
                         time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
                     else:
                         time_remaining = '00:00:00'
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Erro ao calcular tempo: {e}, started_at={started_at}")
         
         status = {
             'connected': printer_serial and printer_serial.is_open,
