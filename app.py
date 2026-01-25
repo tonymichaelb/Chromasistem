@@ -802,10 +802,27 @@ def files():
     return render_template('files.html', username=session.get('username'))
 
 @app.route('/viewer')
-def viewer():
+@app.route('/viewer/<path:filename>')
+def viewer(filename=None):
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    return render_template('gcode_viewer.html', username=session.get('username'))
+    
+    file_id = None
+    if filename:
+        # Buscar ID do arquivo pelo nome
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id FROM gcode_files 
+            WHERE original_name = ? AND user_id = ?
+        ''', (filename, session['user_id']))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            file_id = result[0]
+    
+    return render_template('gcode_viewer.html', username=session.get('username'), file_id=file_id)
 
 @app.route('/terminal')
 def terminal():

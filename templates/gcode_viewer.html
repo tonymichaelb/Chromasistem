@@ -83,10 +83,15 @@
         // Inicializar visualizador
         const viewer = new GCodeViewer('viewer-container');
         
-        // Função para carregar G-code (exemplo com ID de arquivo)
-        async function loadGCode() {
-            const fileId = prompt('Digite o ID do arquivo G-code:');
-            if (!fileId) return;
+        // File ID passado pelo servidor (se houver)
+        const serverFileId = {{ file_id|tojson if file_id else 'null' }};
+        
+        // Função para carregar G-code
+        async function loadGCode(fileId = null) {
+            if (!fileId) {
+                fileId = prompt('Digite o ID do arquivo G-code:');
+                if (!fileId) return;
+            }
             
             try {
                 const response = await fetch(`/api/files/preview/${fileId}`);
@@ -106,14 +111,16 @@
             }
         }
         
-        // Auto-carregar se tiver ?file_id= na URL
+        // Auto-carregar se tiver file_id do servidor ou na URL
         const urlParams = new URLSearchParams(window.location.search);
-        const autoFileId = urlParams.get('file_id');
-        if (autoFileId) {
-            setTimeout(() => {
-                document.getElementById('file-id-input').value = autoFileId;
-                loadGCode();
-            }, 500);
+        const urlFileId = urlParams.get('file_id');
+        
+        if (serverFileId) {
+            // Prioridade: file_id passado pela rota
+            setTimeout(() => loadGCode(serverFileId), 500);
+        } else if (urlFileId) {
+            // Fallback: file_id na query string
+            setTimeout(() => loadGCode(urlFileId), 500);
         }
     </script>
 </body>
