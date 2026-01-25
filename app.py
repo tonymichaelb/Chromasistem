@@ -1169,11 +1169,13 @@ def print_file(file_id):
         WHERE id = ?
     ''', (file_id,))
     
-    # Criar registro de impressão
+    # Criar registro de impressão com hora local
+    from datetime import datetime
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     cursor.execute('''
         INSERT INTO print_jobs (user_id, filename, status, progress, started_at)
-        VALUES (?, ?, 'printing', 0, CURRENT_TIMESTAMP)
-    ''', (session['user_id'], original_name))
+        VALUES (?, ?, 'printing', 0, ?)
+    ''', (session['user_id'], original_name, current_time))
     
     job_id = cursor.lastrowid
     conn.commit()
