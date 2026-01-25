@@ -932,22 +932,38 @@ def printer_status():
                 time_elapsed = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
                 
                 # Calcular tempo restante usando tempo REAL do arquivo (se disponível)
-                if print_time_str:
+                if print_time_str and current_progress > 0:
                     # Parsear tempo do arquivo (ex: "52m 31s" ou "1h 30m 15s")
-                    total_seconds = 0
+                    file_total_seconds = 0
                     h_match = re.search(r'(\d+)h', print_time_str)
                     m_match = re.search(r'(\d+)m', print_time_str)
                     s_match = re.search(r'(\d+)s', print_time_str)
                     
                     if h_match:
-                        total_seconds += int(h_match.group(1)) * 3600
+                        file_total_seconds += int(h_match.group(1)) * 3600
                     if m_match:
-                        total_seconds += int(m_match.group(1)) * 60
+                        file_total_seconds += int(m_match.group(1)) * 60
                     if s_match:
-                        total_seconds += int(s_match.group(1))
+                        file_total_seconds += int(s_match.group(1))
                     
-                    if total_seconds > 0:
-                        remaining = total_seconds - elapsed.total_seconds()
+                    if file_total_seconds > 0:
+                        # Ajuste dinâmico: usa tempo do arquivo no início (0-10%)
+                        # e gradualmente muda para tempo real calculado (10-100%)
+                        if current_progress < 10:
+                            # Início: usa tempo do arquivo
+                            remaining = file_total_seconds - elapsed.total_seconds()
+                        else:
+                            # Durante: faz média ponderada entre arquivo e progresso real
+                            # Quanto maior o progresso, mais confia no tempo real
+                            progress_based_total = elapsed.total_seconds() / (current_progress / 100)
+                            
+                            # Peso do arquivo diminui conforme progresso aumenta
+                            file_weight = max(0, (50 - current_progress) / 50)  # 100% em 0%, 0% em 50%+
+                            progress_weight = 1 - file_weight
+                            
+                            weighted_total = (file_total_seconds * file_weight) + (progress_based_total * progress_weight)
+                            remaining = weighted_total - elapsed.total_seconds()
+                        
                         if remaining > 0:
                             r_hours = int(remaining // 3600)
                             r_minutes = int((remaining % 3600) // 60)
@@ -963,6 +979,10 @@ def printer_status():
                             if remaining > 0:
                                 r_hours = int(remaining // 3600)
                                 r_minutes = int((remaining % 3600) // 60)
+                                r_seconds = int(remaining % 60)
+                                time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                            else:
+                                time_remaining = '00:00:00'
                                 r_seconds = int(remaining % 60)
                                 time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
                             else:
@@ -1434,14 +1454,48 @@ def print_file(file_id):
                     
                     # NÃO adicionar delay aqui - já foi tratado acima baseado no tipo de comando
             
-            # Marcar como concluído
+            # Marcar como concluído e salvar tempo real de impressão
             conn_local = sqlite3.connect(DB_NAME)
             cursor_local = conn_local.cursor()
+            
+            # Calcular tempo real de impressão
+            cursor_local.execute('SELECT started_at FROM print_jobs WHERE id = ?', (job_id,))
+            started_row = cursor_local.fetchone()
+            actual_print_time = None
+            
+            if started_row and started_row[0]:
+                try:
+                    start_time = datetime.strptime(started_row[0], '%Y-%m-%d %H:%M:%S')
+                    elapsed = datetime.now() - start_time
+                    total_seconds = int(elapsed.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+                    
+                    if hours > 0:
+                        actual_print_time = f"{hours}h {minutes}m {seconds}s"
+                    else:
+                        actual_print_time = f"{minutes}m {seconds}s"
+                    
+                    print(f"⏱️ Tempo real de impressão: {actual_print_time}")
+                except Exception as e:
+                    print(f"⚠️ Erro ao calcular tempo real: {e}")
+            
             cursor_local.execute('''
                 UPDATE print_jobs 
                 SET status = 'completed', progress = 100, completed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             ''', (job_id,))
+            
+            # Atualizar tempo real no arquivo G-code (se calculado)
+            if actual_print_time:
+                cursor_local.execute('''
+                    UPDATE gcode_files 
+                    SET print_time = ? 
+                    WHERE original_name = (SELECT filename FROM print_jobs WHERE id = ?)
+                ''', (actual_print_time, job_id))
+                print(f"✓ Tempo real salvo no banco: {actual_print_time}")
+            
             conn_local.commit()
             conn_local.close()
             
