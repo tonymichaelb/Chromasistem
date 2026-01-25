@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador G-Code 3D</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            font-family: Arial, sans-serif;
+            color: #fff;
+        }
+        
+        #viewer-container {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🖨️ Visualizador 3D de G-Code</h1>
+    
+    <div id="viewer-container"></div>
+    
+    <div class="controls">
+        <button onclick="loadGCode()">Carregar G-Code</button>
+        <button onclick="viewer.centerCamera()">Centralizar Câmera</button>
+        <button onclick="viewer.clearLines()">Limpar</button>
+    </div>
+    
+    <div class="info">
+        <p><strong>Controles:</strong></p>
+        <ul>
+            <li>🖱️ <strong>Rotacionar:</strong> Clique esquerdo + arrastar</li>
+            <li>🔍 <strong>Zoom:</strong> Scroll do mouse</li>
+            <li>↔️ <strong>Pan:</strong> Clique direito + arrastar</li>
+        </ul>
+        <p id="layer-info">Camadas: -</p>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- GCode Viewer -->
+    <script src="/static/js/gcode-viewer.js"></script>
+    
+    <script>
+        // Inicializar visualizador
+        const viewer = new GCodeViewer('viewer-container');
+        
+        // Função para carregar G-code (exemplo com ID de arquivo)
+        async function loadGCode() {
+            const fileId = prompt('Digite o ID do arquivo G-code:');
+            if (!fileId) return;
+            
+            try {
+                const response = await fetch(`/api/files/preview/${fileId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    viewer.loadGCode(data.gcode);
+                    document.getElementById('layer-info').textContent = 
+                        `Camadas: ${viewer.totalLayers}`;
+                    console.log('✓ G-Code carregado com sucesso!');
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Erro ao carregar G-code:', error);
+                alert('Erro ao carregar arquivo');
+            }
+        }
+        
+        // Auto-carregar se tiver ?file_id= na URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const autoFileId = urlParams.get('file_id');
+        if (autoFileId) {
+            setTimeout(() => {
+                document.getElementById('file-id-input').value = autoFileId;
+                loadGCode();
+            }, 500);
+        }
+    </script>
+</body>
+</html>

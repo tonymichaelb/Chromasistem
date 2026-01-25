@@ -801,6 +801,12 @@ def files():
         return redirect(url_for('login'))
     return render_template('files.html', username=session.get('username'))
 
+@app.route('/viewer')
+def viewer():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('gcode_viewer.html', username=session.get('username'))
+
 @app.route('/terminal')
 def terminal():
     if 'user_id' not in session:
