@@ -1201,8 +1201,8 @@ def print_file(file_id):
                     elif cmd_upper.startswith('T'):
                         print(f"  🔧 Selecionando extrusora: {line}")
                     
-                    # Enviar comando (todos esperam ok para não perder comandos)
-                    response = send_gcode(line)
+                    # Enviar comando com retry (todos esperam ok para não perder comandos)
+                    response = send_gcode(line, retries=2)
                     
                     # Aguardar apenas após comandos críticos
                     # G0/G1 não têm delay - impressora gerencia buffer
@@ -1213,18 +1213,9 @@ def print_file(file_id):
                     # Sem delay para G0/G1 e outros - máxima velocidade
                     
                     if response is None:
-                        print(f"✗ Erro ao enviar linha {line_count}: {line}")
-                        # Marcar como erro
-                        conn_local = sqlite3.connect(DB_NAME)
-                        cursor_local = conn_local.cursor()
-                        cursor_local.execute('''
-                            UPDATE print_jobs 
-                            SET status = 'error', completed_at = CURRENT_TIMESTAMP
-                            WHERE id = ?
-                        ''', (job_id,))
-                        conn_local.commit()
-                        conn_local.close()
-                        break
+                        print(f"⚠️ Comando falhou (linha {line_count}): {line} - CONTINUANDO impressão...")
+                        # NÃO parar a impressão - apenas logar e continuar
+                        # Comandos malformados ou com erro não devem cancelar impressão inteira
                     
                     line_count += 1
                     lines_sent += 1
