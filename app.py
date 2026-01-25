@@ -1574,6 +1574,32 @@ def download_file(file_id):
     
     return send_from_directory(app.config['GCODE_FOLDER'], filename, as_attachment=True, download_name=original_name)
 
+@app.route('/api/files/preview/<int:file_id>', methods=['GET'])
+def preview_gcode(file_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT filename FROM gcode_files WHERE id = ? AND user_id = ?', 
+                  (file_id, session['user_id']))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'success': False, 'message': 'Arquivo não encontrado'}), 404
+    
+    filename = result[0]
+    filepath = os.path.join(app.config['GCODE_FOLDER'], filename)
+    
+    # Ler G-code (limitar a 10MB para não sobrecarregar)
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            gcode_content = f.read(10 * 1024 * 1024)  # Max 10MB
+        return jsonify({'success': True, 'gcode': gcode_content})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao ler arquivo: {str(e)}'}), 500
+
 # ==================== ROTAS DE CONFIGURAÇÃO WI-FI ====================
 
 @app.route('/wifi')
