@@ -876,10 +876,11 @@ def printer_status():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT filename, progress, started_at 
-        FROM print_jobs 
-        WHERE status = 'printing' 
-        ORDER BY started_at DESC 
+        SELECT pj.filename, pj.progress, pj.started_at, gf.print_time
+        FROM print_jobs pj
+        LEFT JOIN gcode_files gf ON pj.filename = gf.original_name
+        WHERE pj.status = 'printing' 
+        ORDER BY pj.started_at DESC 
         LIMIT 1
     ''')
     current_job = cursor.fetchone()
@@ -891,6 +892,7 @@ def printer_status():
         current_progress = current_job[1] if current_job else 0
         current_filename = current_job[0] if current_job else ''
         started_at = current_job[2] if current_job else None
+        print_time_str = current_job[3] if len(current_job) > 3 else None
         
         # Consultar temperatura via M105 (não interfere com impressão)
         temp_response = send_gcode('M105')
@@ -929,17 +931,54 @@ def printer_status():
                 seconds = int(elapsed.total_seconds() % 60)
                 time_elapsed = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
                 
-                # Calcular tempo restante (estimativa)
-                if current_progress > 0:
-                    total_time = elapsed.total_seconds() / (current_progress / 100)
-                    remaining = total_time - elapsed.total_seconds()
-                    if remaining > 0:
-                        r_hours = int(remaining // 3600)
-                        r_minutes = int((remaining % 3600) // 60)
-                        r_seconds = int(remaining % 60)
-                        time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                # Calcular tempo restante usando tempo REAL do arquivo (se disponível)
+                if print_time_str:
+                    # Parsear tempo do arquivo (ex: "52m 31s" ou "1h 30m 15s")
+                    total_seconds = 0
+                    h_match = re.search(r'(\d+)h', print_time_str)
+                    m_match = re.search(r'(\d+)m', print_time_str)
+                    s_match = re.search(r'(\d+)s', print_time_str)
+                    
+                    if h_match:
+                        total_seconds += int(h_match.group(1)) * 3600
+                    if m_match:
+                        total_seconds += int(m_match.group(1)) * 60
+                    if s_match:
+                        total_seconds += int(s_match.group(1))
+                    
+                    if total_seconds > 0:
+                        remaining = total_seconds - elapsed.total_seconds()
+                        if remaining > 0:
+                            r_hours = int(remaining // 3600)
+                            r_minutes = int((remaining % 3600) // 60)
+                            r_seconds = int(remaining % 60)
+                            time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                        else:
+                            time_remaining = '00:00:00'
                     else:
-                        time_remaining = '00:00:00'
+                        # Fallback: calcular com base no progresso
+                        if current_progress > 0:
+                            total_time = elapsed.total_seconds() / (current_progress / 100)
+                            remaining = total_time - elapsed.total_seconds()
+                            if remaining > 0:
+                                r_hours = int(remaining // 3600)
+                                r_minutes = int((remaining % 3600) // 60)
+                                r_seconds = int(remaining % 60)
+                                time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                            else:
+                                time_remaining = '00:00:00'
+                else:
+                    # Fallback: calcular com base no progresso
+                    if current_progress > 0:
+                        total_time = elapsed.total_seconds() / (current_progress / 100)
+                        remaining = total_time - elapsed.total_seconds()
+                        if remaining > 0:
+                            r_hours = int(remaining // 3600)
+                            r_minutes = int((remaining % 3600) // 60)
+                            r_seconds = int(remaining % 60)
+                            time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
+                        else:
+                            time_remaining = '00:00:00'
             except Exception as e:
                 print(f"⚠️ Erro ao calcular tempo: {e}, started_at={started_at}")
         
