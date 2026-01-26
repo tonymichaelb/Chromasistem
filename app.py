@@ -21,6 +21,7 @@ except (ImportError, RuntimeError):
 
 # Importar threading para lock
 import threading
+from collections import deque
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -28,6 +29,12 @@ CORS(app)
 
 # Lock para sincronizar acesso à porta serial
 serial_lock = threading.Lock()
+
+# Lock para sincronizar acesso ao histórico de comandos
+history_lock = threading.Lock()
+
+# Histórico de comandos G-code (últimos 100 comandos)
+commands_history = deque(maxlen=100)
 
 # Flags de controle de impressão
 print_paused = False
@@ -1171,13 +1178,42 @@ def send_gcode_api():
     if not command:
         return jsonify({'success': False, 'message': 'Comando vazio'}), 400
     
+    # Registrar comando no histórico
+    with history_lock:
+        commands_history.append({
+            'timestamp': datetime.now().isoformat(),
+            'command': command,
+            'type': 'sent'
+        })
+    
     # Enviar comando para impressora
     response = send_gcode(command)
     
+    # Registrar resposta no histórico
     if response is not None:
+        with history_lock:
+            commands_history.append({
+                'timestamp': datetime.now().isoformat(),
+                'command': response,
+                'type': 'response'
+            })
         return jsonify({'success': True, 'response': response})
     else:
         return jsonify({'success': False, 'message': 'Sem resposta da impressora'}), 500
+
+@app.route('/api/printer/commands-history', methods=['GET'])
+def get_commands_history():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    with history_lock:
+        history = list(commands_history)
+    
+    return jsonify({
+        'success': True,
+        'history': history,
+        'count': len(history)
+    })
 
 # API de Gerenciamento de Arquivos G-code
 @app.route('/api/files/list', methods=['GET'])

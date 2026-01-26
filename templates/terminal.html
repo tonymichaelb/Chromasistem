@@ -173,6 +173,7 @@
     <script>
         let jogDistance = 10;
         let tempChart;
+        let lastHistoryCount = 0;
         let tempData = {
             labels: [],
             nozzle: [],
@@ -415,6 +416,39 @@
             if (e.key === 'Enter') sendGcode();
         });
         
+        // Função para atualizar histórico de comandos em tempo real
+        async function updateCommandsHistory() {
+            try {
+                const response = await fetch('/api/printer/commands-history');
+                const data = await response.json();
+                
+                if (data.success && data.count > lastHistoryCount) {
+                    // Mostrar apenas os novos comandos
+                    const newCommands = data.history.slice(lastHistoryCount);
+                    newCommands.forEach(item => {
+                        const terminal = document.getElementById('terminalOutput');
+                        const line = document.createElement('div');
+                        line.style.marginBottom = '5px';
+                        
+                        if (item.type === 'sent') {
+                            line.style.color = '#ffff00';
+                            line.textContent = '> ' + item.command + ' [' + new Date(item.timestamp).toLocaleTimeString() + ']';
+                        } else if (item.type === 'response') {
+                            line.style.color = '#00ff00';
+                            line.textContent = '< ' + item.command + ' [' + new Date(item.timestamp).toLocaleTimeString() + ']';
+                        }
+                        
+                        terminal.appendChild(line);
+                        terminal.scrollTop = terminal.scrollHeight;
+                    });
+                    
+                    lastHistoryCount = data.count;
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar histórico de comandos:', error);
+            }
+        }
+        
         // Notificação
         function showNotification(message, type = 'info') {
             const notification = document.getElementById('notification');
@@ -438,7 +472,9 @@
         // Inicializar
         initTempChart();
         updateStatus();
+        updateCommandsHistory();
         setInterval(updateStatus, 2000);
+        setInterval(updateCommandsHistory, 500); // Atualizar histórico a cada 500ms para tempo real
     </script>
 </body>
 </html>
