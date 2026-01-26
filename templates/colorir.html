@@ -397,12 +397,12 @@
             Pincel Selecionado: <span id="currentBrush">T0 (Nenhum)</span>
         </div>
 
-        <h2>Pincéis Disponíveis</h2>
+        <h2>Pincel</h2>
         <div class="paintbrushes-grid" id="paintbrushesGrid"></div>
 
         <div class="status-message" id="statusMessage"></div>
 
-        <h2 style="margin-top: 40px;">Cores Padrão dos Pincéis</h2>
+        <h2 style="margin-top: 40px;">Tinta</h2>
         <div class="color-samples" id="colorSamples"></div>
 
     </div>
@@ -504,7 +504,7 @@
                 btn.className = 'paintbrush-btn';
                 btn.innerHTML = `
                     <div class="paintbrush-icon">🖌️</div>
-                    <div class="paintbrush-label">T${i}</div>
+                    <div class="paintbrush-label">${i + 1}</div>
                     <div class="paintbrush-label" style="font-size: 10px; opacity: 0.8;">${brush.name.split(' - ')[1]}</div>
                 `;
                 
