@@ -1,6 +1,10 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "🚀 Iniciando Chromasistem..."
+
+# Desbloqueia Wi-Fi por segurança
+rfkill unblock wifi || true
 
 # Aguarda 3 minutos tentando encontrar Wi-Fi
 echo "⏳ Procurando redes Wi-Fi disponíveis (180 segundos)..."
@@ -16,7 +20,7 @@ for i in $(seq 1 $WIFI_TIMEOUT); do
         sleep 1
         continue
     fi
-    
+
     # Verifica se tem IP (conectado a Wi-Fi)
     if ip addr show wlan0 | grep -q "inet "; then
         CURRENT_IP=$(ip addr show wlan0 | grep "inet " | awk '{print $2}')
@@ -24,7 +28,7 @@ for i in $(seq 1 $WIFI_TIMEOUT); do
         WIFI_FOUND=1
         break
     fi
-    
+
     if [ $((i % 30)) -eq 0 ]; then
         echo "⏳ Aguardando Wi-Fi... ($i/$WIFI_TIMEOUT segundos)"
     fi
@@ -34,38 +38,39 @@ done
 # Se não encontrou Wi-Fi, ativa hotspot
 if [ $WIFI_FOUND -eq 0 ]; then
     echo "❌ Wi-Fi não encontrado após 3 minutos. Ativando hotspot..."
-    
-    # Aguarda um pouco
-    sleep 2
-    
-    # Para networkmanager se estiver rodando
-    sudo systemctl stop NetworkManager 2>/dev/null
-    sudo systemctl disable NetworkManager 2>/dev/null
-    
-    # Configura IP estático em wlan0
-    echo "🔧 Configurando IP estático em wlan0..."
-    sudo ip addr flush dev wlan0
-    sudo ip addr add 192.168.4.1/24 dev wlan0
-    sudo ip link set wlan0 up
-    
-    # Para dnsmasq se estiver rodando
-    sudo systemctl stop dnsmasq 2>/dev/null
-    
-    # Inicia dnsmasq com config customizada
-    echo "🌐 Iniciando DHCP/DNS..."
-    sudo dnsmasq -C /home/pi/Chromasistem/dnsmasq-hotspot.conf -d &
-    DNSMASQ_PID=$!
-    sleep 2
-    
-    # Para hostapd se estiver rodando
-    sudo pkill -f hostapd 2>/dev/null
-    
-    # Inicia hostapd
-    echo "📡 Iniciando hotspot Chromasistem..."
-    sudo hostapd /home/pi/Chromasistem/hostapd.conf -B
-    
-    sleep 2
-    echo "✅ Hotspot ativado! Conecte em 'Chromasistem' com senha '12345678'"
+
+    # País/regulatório para o Wi-Fi (necessário para hostapd)
+    iw reg set BR || true
+
+    # Para serviços que conflitam
+    systemctl stop NetworkManager 2>/dev/null || true
+    systemctl disable NetworkManager 2>/dev/null || true
+    systemctl stop wpa_supplicant@wlan0.service 2>/dev/null || true
+    systemctl stop wpa_supplicant.service 2>/dev/null || true
+    systemctl stop dhcpcd@wlan0.service 2>/dev/null || true
+
+    # Reconfigura interface wlan0 com IP estático
+    echo "🔧 Configurando IP estático em wlan0 (192.168.4.1)..."
+    ip link set wlan0 down || true
+    ip addr flush dev wlan0 || true
+    ip addr add 192.168.4.1/24 dev wlan0
+    ip link set wlan0 up
+
+    # Garante configs atualizadas no sistema
+    install -D -m 644 /home/pi/Chromasistem/hostapd.conf /etc/hostapd/hostapd.conf
+    install -D -m 644 /home/pi/Chromasistem/dnsmasq-hotspot.conf /etc/dnsmasq.d/99-chromasistem-hotspot.conf
+
+    # Reinicia dnsmasq
+    echo "🌐 Iniciando DHCP/DNS (dnsmasq)..."
+    systemctl restart dnsmasq || true
+
+    # Inicia hostapd (ponto de acesso)
+    echo "📡 Iniciando hotspot Chromasistem (hostapd)..."
+    pkill -f hostapd 2>/dev/null || true
+    hostapd /etc/hostapd/hostapd.conf -B
+
+    sleep 3
+    echo "✅ Hotspot ativado! SSID: 'Chromasistem' senha: '12345678' IP: 192.168.4.1"
 fi
 
 # Inicia a aplicação
