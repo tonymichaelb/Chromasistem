@@ -592,10 +592,16 @@
 
         // Selecionar pincel
         function selectBrush(index) {
+            // Atualizar imediatamente (sem esperar servidor)
+            currentBrushIndex = index;
+            updateUI();
+            
             // Obter mistura salva para este pincel
             const mixture = brushMixtures[index] || {a: 33, b: 33, c: 34};
             
-            // Enviar comando T para a impressora
+            showMessage(`✅ Pincel ${index + 1} (T${index}) selecionado! Agora escolha uma tinta.`, 'success');
+            
+            // Enviar comando T para a impressora (em background)
             fetch('/api/printer/select-brush', {
                 method: 'POST',
                 headers: {
@@ -605,19 +611,14 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    currentBrushIndex = index;
-                    updateUI();
-                    showMessage(`✅ Pincel ${index + 1} (T${index}) selecionado! Agora escolha uma tinta.`, 'success');
-                    
-                    // Enviar mistura associada
-                    sendMixtureForBrush(index, mixture);
-                } else {
-                    showMessage(`❌ Erro: ${data.message}`, 'error');
+                if (!data.success) {
+                    showMessage(`⚠️ Comando T${index} pode não ter sido enviado`, 'info');
                 }
+                // Enviar mistura associada
+                sendMixtureForBrush(index, mixture);
             })
             .catch(error => {
-                showMessage(`❌ Erro ao selecionar pincel: ${error}`, 'error');
+                console.error('Erro ao enviar comando:', error);
             });
         }
 
