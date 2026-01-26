@@ -1,0 +1,17 @@
+[Unit]
+Description=Chromasistem - Sistema de Monitoramento 3D
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/Chromasistem
+Environment="PATH=/home/pi/Chromasistem/venv/bin"
+ExecStart=/home/pi/Chromasistem/venv/bin/python app.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

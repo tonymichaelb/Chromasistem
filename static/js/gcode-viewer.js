@@ -203,7 +203,9 @@ class GCodeViewer {
                         lineWidth / 2,  // raio topo
                         lineWidth / 2,  // raio base
                         length,         // altura
-                        12              // segmentos radiais aumentado de 8 para 12
+                        8,              // segmentos radiais (otimizado para performance)
+                        1,              // segmentos de altura
+                        false           // sem tampa
                     );
                     
                     const cylinder = new THREE.Mesh(geometry, material);
