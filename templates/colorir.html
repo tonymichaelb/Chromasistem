@@ -34,6 +34,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
         }
 
         .paintbrush-btn:hover {
@@ -56,6 +57,35 @@
             font-size: 12px;
             text-align: center;
             word-break: break-word;
+        }
+
+        /* Bolinha de mistura */
+        .mixture-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        .mixture-btn:hover {
+            background: white;
+            transform: scale(1.15);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .mixture-btn:active {
+            transform: scale(0.95);
         }
 
         .status-message {
@@ -114,6 +144,7 @@
             flex-direction: column;
             align-items: center;
             gap: 8px;
+            position: relative;
         }
 
         .color-box {
@@ -129,6 +160,35 @@
             text-align: center;
             font-weight: bold;
             color: #555;
+        }
+
+        .color-mixture-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            padding: 0;
+        }
+
+        .color-mixture-btn:hover {
+            background: white;
+            transform: scale(1.15);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .color-mixture-btn:active {
+            transform: scale(0.95);
         }
 
         .filament-slider {
@@ -342,62 +402,12 @@
 
         <div class="status-message" id="statusMessage"></div>
 
-        <h2 style="margin-top: 40px;">Cores Padrão dos Pincéis</h2>
+        <h2 style="margin-top: 40px; display: flex; justify-content: space-between; align-items: center;">
+            <span>Cores Padrão dos Pincéis</span>
+            <button class="mixture-btn" id="globalMixtureBtn" title="Configurar mistura" style="position: static; width: 40px; height: 40px; margin: 0;">🔧</button>
+        </h2>
         <div class="color-samples" id="colorSamples"></div>
 
-        <!-- SEÇÃO DE MISTURA -->
-        <h2 style="margin-top: 60px;">🧪 Mistura de Filamentos</h2>
-        <p>Ajuste a proporção de cada filamento.</p>
-
-        <div style="background: #f0f8ff; border-left: 4px solid #0066cc; padding: 15px; border-radius: 5px; margin: 20px 0; font-size: 14px; color: #333;">
-            <strong>ℹ️ Comando:</strong> M182 A[%] B[%] C[%]<br>
-            Filamento A (Extrusora 1) • Filamento B (Extrusora 2) • Filamento C (Extrusora 3)
-        </div>
-
-        <div id="filamentControls" style="display: grid; grid-template-columns: 1fr; gap: 30px; margin-top: 30px;">
-            <!-- Filamento A -->
-            <div style="background: #f9f9f9; padding: 25px; border-radius: 8px; border: 2px solid #e0e0e0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <span style="font-size: 18px; font-weight: bold; color: #333;">Filamento A (Extrusora 1)</span>
-                    <span style="font-size: 24px; font-weight: bold; color: #0066cc; min-width: 60px; text-align: right;" id="percentA">33%</span>
-                </div>
-                <input type="range" class="filament-slider" id="sliderA" min="0" max="100" value="33" style="width: 100%; height: 8px; border-radius: 5px; background: #ddd; outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;">
-            </div>
-
-            <!-- Filamento B -->
-            <div style="background: #f9f9f9; padding: 25px; border-radius: 8px; border: 2px solid #e0e0e0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <span style="font-size: 18px; font-weight: bold; color: #333;">Filamento B (Extrusora 2)</span>
-                    <span style="font-size: 24px; font-weight: bold; color: #0066cc; min-width: 60px; text-align: right;" id="percentB">33%</span>
-                </div>
-                <input type="range" class="filament-slider" id="sliderB" min="0" max="100" value="33" style="width: 100%; height: 8px; border-radius: 5px; background: #ddd; outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;">
-            </div>
-
-            <!-- Filamento C -->
-            <div style="background: #f9f9f9; padding: 25px; border-radius: 8px; border: 2px solid #e0e0e0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <span style="font-size: 18px; font-weight: bold; color: #333;">Filamento C (Extrusora 3)</span>
-                    <span style="font-size: 24px; font-weight: bold; color: #0066cc; min-width: 60px; text-align: right;" id="percentC">34%</span>
-                </div>
-                <input type="range" class="filament-slider" id="sliderC" min="0" max="100" value="34" style="width: 100%; height: 8px; border-radius: 5px; background: #ddd; outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;">
-            </div>
-        </div>
-
-        <!-- Total -->
-        <div id="sumTotal" style="background: #e8f5e9; border: 2px solid #4caf50; padding: 20px; border-radius: 8px; margin-top: 30px; text-align: center; font-size: 18px; font-weight: bold;">
-            Total: <span id="sumValue" style="font-size: 28px;">100%</span>
-        </div>
-
-        <!-- Preview do comando -->
-        <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 12px; border-radius: 5px; font-family: monospace; font-size: 14px; margin-top: 15px; color: #333; word-break: break-all;">
-            <strong>Comando a enviar:</strong><br>
-            <span id="commandPreview">M182 A33 B33 C34</span>
-        </div>
-
-        <!-- Botão Enviar -->
-        <button id="sendMixtureBtn" style="width: 100%; margin-top: 25px; padding: 15px; font-size: 16px; font-weight: bold; color: white; background: #4caf50; border: none; border-radius: 8px; cursor: pointer; transition: background 0.3s ease;">📤 Enviar Mistura</button>
-
-        <div class="status-message" id="mixtureStatusMessage"></div>
     </div>
 
     <!-- Modal de Mistura -->
@@ -505,7 +515,11 @@
                 btn.style.borderLeftColor = brush.hex;
                 btn.style.borderLeftWidth = '4px';
 
-                btn.addEventListener('click', () => selectBrush(i));
+                // Clique no pincel = seleciona
+                btn.addEventListener('click', (e) => {
+                    selectBrush(i);
+                });
+
                 grid.appendChild(btn);
             }
         }
@@ -519,13 +533,20 @@
                 const brush = brushColors[i];
                 const sample = document.createElement('div');
                 sample.className = 'color-sample';
+                sample.style.position = 'relative';
                 sample.innerHTML = `
                     <div class="color-box" style="background-color: ${brush.hex};"></div>
                     <div class="color-name">${brush.name}</div>
+                    <button class="color-mixture-btn" title="Configurar mistura">🔧</button>
                 `;
                 
-                // Adicionar evento de clique para abrir modal de mistura
-                sample.addEventListener('click', () => openMixtureModal(i));
+                // Adicionar evento de clique na catraca
+                const mixtureBtn = sample.querySelector('.color-mixture-btn');
+                mixtureBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openMixtureModal(i);
+                });
+                
                 container.appendChild(sample);
             }
         }
