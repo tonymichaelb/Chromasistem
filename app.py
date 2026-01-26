@@ -802,6 +802,7 @@ def files():
     return render_template('files.html', username=session.get('username'))
 
 @app.route('/viewer')
+@app.route('/viewer')
 @app.route('/viewer/<path:filename>')
 def viewer(filename=None):
     if 'user_id' not in session:
@@ -821,6 +822,16 @@ def viewer(filename=None):
         
         if result:
             file_id = result[0]
+            print(f"✓ Arquivo '{filename}' encontrado com ID: {file_id}")
+        else:
+            print(f"✗ Arquivo '{filename}' NÃO encontrado para user_id={session['user_id']}")
+            # Tentar listar todos os arquivos para debug
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, original_name FROM gcode_files WHERE user_id = ?', (session['user_id'],))
+            all_files = cursor.fetchall()
+            conn.close()
+            print(f"  Arquivos disponíveis: {all_files}")
     
     return render_template('gcode_viewer.html', username=session.get('username'), file_id=file_id)
 
@@ -1011,20 +1022,6 @@ def printer_status():
                                 time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
                             else:
                                 time_remaining = '00:00:00'
-                                r_seconds = int(remaining % 60)
-                                time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
-                            else:
-                                time_remaining = '00:00:00'
-                else:
-                    # Fallback: calcular com base no progresso
-                    if current_progress > 0:
-                        total_time = elapsed.total_seconds() / (current_progress / 100)
-                        remaining = total_time - elapsed.total_seconds()
-                        if remaining > 0:
-                            r_hours = int(remaining // 3600)
-                            r_minutes = int((remaining % 3600) // 60)
-                            r_seconds = int(remaining % 60)
-                            time_remaining = f"{r_hours:02d}:{r_minutes:02d}:{r_seconds:02d}"
                         else:
                             time_remaining = '00:00:00'
             except Exception as e:

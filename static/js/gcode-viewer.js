@@ -9,6 +9,7 @@ class GCodeViewer {
         this.lines = [];
         this.currentLayer = 0;
         this.totalLayers = 0;
+        this.parsedLayers = []; // Armazenar camadas parseadas
         
         this.init();
     }
@@ -44,12 +45,16 @@ class GCodeViewer {
         this.scene.add(axesHelper);
         
         // Iluminação
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         this.scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(10, 10, 10);
         this.scene.add(directionalLight);
+        
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+        directionalLight2.position.set(-10, -10, -10);
+        this.scene.add(directionalLight2);
         
         // Mesa de impressão (200x200mm)
         const bedGeometry = new THREE.PlaneGeometry(200, 200);
@@ -72,30 +77,17 @@ class GCodeViewer {
     
     parseGCode(gcodeText) {
         const lines = gcodeText.split('\n');
-        const points = [];
         let currentPosition = { x: 0, y: 0, z: 0, e: 0 };
-        let isExtruding = false;
-        let layerZ = 0;
+        let currentZ = -1;
         const layers = [];
         let currentLayerPoints = [];
+        
+        console.log('🔍 Iniciando parse do G-code...');
         
         for (let line of lines) {
             // Remover comentários
             line = line.split(';')[0].trim();
             if (!line) continue;
-            
-            // Detectar mudança de camada
-            const zMatch = line.match(/Z([\d.]+)/);
-            if (zMatch) {
-                const newZ = parseFloat(zMatch[1]);
-                if (newZ > layerZ) {
-                    if (currentLayerPoints.length > 0) {
-                        layers.push([...currentLayerPoints]);
-                        currentLayerPoints = [];
-                    }
-                    layerZ = newZ;
-                }
-            }
             
             // Comandos de movimento
             if (line.startsWith('G0') || line.startsWith('G1')) {
@@ -104,12 +96,18 @@ class GCodeViewer {
                 const z = this.parseCoord(line, 'Z', currentPosition.z);
                 const e = this.parseCoord(line, 'E', currentPosition.e);
                 
-                // Verificar se está extrudando
-                const wasExtruding = isExtruding;
-                isExtruding = e > currentPosition.e;
+                // Detectar mudança de camada (mudança em Z)
+                if (z !== currentPosition.z && z > currentZ) {
+                    if (currentLayerPoints.length > 0) {
+                        layers.push([...currentLayerPoints]);
+                        console.log(`  Camada ${layers.length}: Z=${currentZ.toFixed(2)}mm, ${currentLayerPoints.length} segmentos`);
+                        currentLayerPoints = [];
+                    }
+                    currentZ = z;
+                }
                 
-                if (isExtruding && wasExtruding) {
-                    // Adicionar linha de extrusão
+                // Adicionar QUALQUER movimento com extrusão (e > posição anterior)
+                if (e > currentPosition.e) {
                     currentLayerPoints.push({
                         start: { ...currentPosition },
                         end: { x, y, z }
@@ -123,9 +121,11 @@ class GCodeViewer {
         // Adicionar última camada
         if (currentLayerPoints.length > 0) {
             layers.push(currentLayerPoints);
+            console.log(`  Camada ${layers.length}: Z=${currentZ.toFixed(2)}mm, ${currentLayerPoints.length} segmentos`);
         }
         
         this.totalLayers = layers.length;
+        console.log(`✅ Total: ${layers.length} camadas detectadas`);
         return layers;
     }
     
@@ -135,14 +135,28 @@ class GCodeViewer {
     }
     
     loadGCode(gcodeText) {
+        console.log('📥 Carregando G-code... tamanho:', gcodeText.length, 'caracteres');
+        
         // Limpar linhas anteriores
         this.clearLines();
         
         // Parsear G-code
         const layers = this.parseGCode(gcodeText);
+        this.parsedLayers = layers; // Salvar para controle de camadas
+        
+        console.log('📊 Camadas encontradas:', layers.length);
+        console.log('📐 Total de segmentos:', layers.reduce((sum, layer) => sum + layer.length, 0));
+        
+        if (layers.length === 0) {
+            console.error('❌ Nenhuma camada encontrada no G-code!');
+            alert('Erro: Nenhuma camada encontrada no G-code');
+            return;
+        }
         
         // Renderizar todas as camadas
         this.renderLayers(layers);
+        
+        console.log('✅ G-code renderizado com', this.lines.length, 'linhas');
         
         // Centralizar câmera
         this.centerCamera();
@@ -150,34 +164,60 @@ class GCodeViewer {
     
     renderLayers(layers, maxLayer = null) {
         const layersToRender = maxLayer !== null ? layers.slice(0, maxLayer + 1) : layers;
+        const lineWidth = 0.8; // Aumentar espessura para 0.8mm
         
         layersToRender.forEach((layer, layerIndex) => {
-            // Cor baseada na altura (gradiente do azul ao vermelho)
-            const hue = (layerIndex / layers.length) * 0.6; // 0 (vermelho) a 0.6 (azul)
-            const color = new THREE.Color().setHSL(0.6 - hue, 1, 0.5);
+            // Cor baseada na altura (gradiente) - cores sólidas e vibrantes
+            const hue = (layerIndex / layers.length) * 0.7;
+            const color = new THREE.Color().setHSL(0.15 + hue, 1.0, 0.5);
             
-            const material = new THREE.LineBasicMaterial({ 
+            // Material com iluminação para parecer sólido - SEM CULLING
+            const material = new THREE.MeshPhongMaterial({ 
                 color: color,
-                linewidth: 2
+                shininess: 30,
+                specular: 0x333333,
+                transparent: false,
+                opacity: 1.0,
+                flatShading: false,
+                side: THREE.DoubleSide  // Renderizar ambos os lados
             });
             
             layer.forEach(segment => {
-                const geometry = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(
-                        segment.start.x - 100, 
-                        segment.start.z, 
-                        segment.start.y - 100
-                    ),
-                    new THREE.Vector3(
-                        segment.end.x - 100, 
-                        segment.end.z, 
-                        segment.end.y - 100
-                    )
-                ]);
+                const start = new THREE.Vector3(
+                    segment.start.x - 100, 
+                    segment.start.z, 
+                    segment.start.y - 100
+                );
+                const end = new THREE.Vector3(
+                    segment.end.x - 100, 
+                    segment.end.z, 
+                    segment.end.y - 100
+                );
                 
-                const line = new THREE.Line(geometry, material);
-                this.scene.add(line);
-                this.lines.push(line);
+                // Criar tubo cilíndrico representando a linha de extrusão
+                const direction = new THREE.Vector3().subVectors(end, start);
+                const length = direction.length();
+                
+                if (length > 0.01) { // Evitar linhas muito pequenas
+                    const geometry = new THREE.CylinderGeometry(
+                        lineWidth / 2,  // raio topo
+                        lineWidth / 2,  // raio base
+                        length,         // altura
+                        12              // segmentos radiais aumentado de 8 para 12
+                    );
+                    
+                    const cylinder = new THREE.Mesh(geometry, material);
+                    
+                    // Posicionar e orientar o cilindro
+                    cylinder.position.copy(start).add(direction.multiplyScalar(0.5));
+                    cylinder.quaternion.setFromUnitVectors(
+                        new THREE.Vector3(0, 1, 0),
+                        direction.normalize()
+                    );
+                    
+                    this.scene.add(cylinder);
+                    this.lines.push(cylinder);
+                }
             });
         });
     }
@@ -185,16 +225,17 @@ class GCodeViewer {
     clearLines() {
         this.lines.forEach(line => {
             this.scene.remove(line);
-            line.geometry.dispose();
-            line.material.dispose();
+            if (line.geometry) line.geometry.dispose();
+            if (line.material) line.material.dispose();
         });
         this.lines = [];
     }
     
     centerCamera() {
-        this.camera.position.set(0, 150, 150);
-        this.camera.lookAt(0, 50, 0);
-        this.controls.target.set(0, 50, 0);
+        // Posição otimizada para ver o objeto inteiro
+        this.camera.position.set(80, 120, 80);
+        this.camera.lookAt(0, 30, 0);
+        this.controls.target.set(0, 30, 0);
         this.controls.update();
     }
     

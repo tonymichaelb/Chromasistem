@@ -62,6 +62,15 @@
         <button onclick="viewer.clearLines()">Limpar</button>
     </div>
     
+    <div class="controls" style="margin-top: 10px;">
+        <label style="margin-right: 10px;">Mostrar até camada:</label>
+        <input type="range" id="layer-slider" min="1" max="1" value="1" 
+               style="width: 300px; vertical-align: middle;"
+               oninput="updateLayerDisplay(this.value)">
+        <span id="layer-display" style="margin-left: 10px; font-weight: bold;">1 / 1</span>
+        <button onclick="showAllLayers()" style="margin-left: 20px;">Mostrar Todas</button>
+    </div>
+    
     <div class="info">
         <p><strong>Controles:</strong></p>
         <ul>
@@ -69,12 +78,16 @@
             <li>🔍 <strong>Zoom:</strong> Scroll do mouse</li>
             <li>↔️ <strong>Pan:</strong> Clique direito + arrastar</li>
         </ul>
-        <p id="layer-info">Camadas: -</p>
+        <div id="stats" style="margin-top: 15px; padding: 10px; background: #222; border-radius: 4px;">
+            <p id="layer-info" style="margin: 5px 0; font-size: 16px; color: #4CAF50;">Camadas: -</p>
+            <p id="line-count" style="margin: 5px 0; font-size: 14px; color: #2196F3;">Linhas: -</p>
+            <p id="file-size" style="margin: 5px 0; font-size: 14px; color: #FF9800;">Tamanho: -</p>
+        </div>
     </div>
 
-    <!-- Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Three.js (versão compatível com OrbitControls) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     
     <!-- GCode Viewer -->
     <script src="/static/js/gcode-viewer.js"></script>
@@ -82,9 +95,29 @@
     <script>
         // Inicializar visualizador
         const viewer = new GCodeViewer('viewer-container');
+        let currentLayers = [];
         
         // File ID passado pelo servidor (se houver)
-        const serverFileId = {{ file_id|tojson if file_id else 'null' }};
+        const serverFileId = {% if file_id %}{{ file_id }}{% else %}null{% endif %};
+        
+        // Atualizar visualização de camadas
+        function updateLayerDisplay(layerNum) {
+            const maxLayer = parseInt(layerNum);
+            document.getElementById('layer-display').textContent = `${maxLayer} / ${viewer.totalLayers}`;
+            
+            // Re-renderizar apenas até a camada selecionada
+            viewer.clearLines();
+            viewer.renderLayers(currentLayers, maxLayer - 1); // -1 porque índice começa em 0
+            
+            console.log(`📊 Mostrando camadas 1-${maxLayer} de ${viewer.totalLayers}`);
+        }
+        
+        // Mostrar todas as camadas
+        function showAllLayers() {
+            const slider = document.getElementById('layer-slider');
+            slider.value = viewer.totalLayers;
+            updateLayerDisplay(viewer.totalLayers);
+        }
         
         // Função para carregar G-code
         async function loadGCode(fileId = null) {
@@ -98,15 +131,34 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    console.log('📦 Arquivo carregado:', data.gcode.length, 'caracteres');
+                    document.getElementById('file-size').textContent = 
+                        `Tamanho: ${(data.gcode.length / 1024).toFixed(1)} KB`;
+                    
                     viewer.loadGCode(data.gcode);
+                    
+                    // Salvar camadas para controle
+                    currentLayers = viewer.parsedLayers;
+                    
+                    // Atualizar interface
                     document.getElementById('layer-info').textContent = 
                         `Camadas: ${viewer.totalLayers}`;
-                    console.log('✓ G-Code carregado com sucesso!');
+                    document.getElementById('line-count').textContent = 
+                        `Linhas: ${viewer.lines.length}`;
+                    
+                    // Configurar slider
+                    const slider = document.getElementById('layer-slider');
+                    slider.max = viewer.totalLayers;
+                    slider.value = viewer.totalLayers;
+                    document.getElementById('layer-display').textContent = 
+                        `${viewer.totalLayers} / ${viewer.totalLayers}`;
+                    
+                    console.log('✅ Renderizado:', viewer.totalLayers, 'camadas,', viewer.lines.length, 'linhas');
                 } else {
                     alert('Erro: ' + data.message);
                 }
             } catch (error) {
-                console.error('Erro ao carregar G-code:', error);
+                console.error('❌ Erro ao carregar G-code:', error);
                 alert('Erro ao carregar arquivo');
             }
         }
@@ -117,10 +169,14 @@
         
         if (serverFileId) {
             // Prioridade: file_id passado pela rota
+            console.log('🎯 Auto-carregando arquivo ID:', serverFileId);
             setTimeout(() => loadGCode(serverFileId), 500);
         } else if (urlFileId) {
             // Fallback: file_id na query string
+            console.log('🎯 Auto-carregando da URL:', urlFileId);
             setTimeout(() => loadGCode(urlFileId), 500);
+        } else {
+            console.log('ℹ️ Nenhum arquivo especificado. Use o botão ou URL com ?file_id=1');
         }
     </script>
 </body>
