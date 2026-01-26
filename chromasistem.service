@@ -1,13 +1,13 @@
 [Unit]
 Description=Chromasistem - Sistema de Monitoramento 3D
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/home/pi/Chromasistem
-Environment="PATH=/home/pi/Chromasistem/venv/bin"
-ExecStart=/home/pi/Chromasistem/venv/bin/python app.py
+ExecStart=/bin/bash /home/pi/Chromasistem/start_chromasistem.sh
 Restart=always
 RestartSec=10
 StandardOutput=journal
