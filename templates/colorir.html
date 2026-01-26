@@ -651,7 +651,6 @@
         const modalPercentC = document.getElementById('modalPercentC');
         const modalTotal = document.getElementById('modalTotal');
         const modalCommand = document.getElementById('modalCommand');
-        const modalBrushName = document.getElementById('modalBrushName');
         const modalSaveBtn = document.getElementById('modalSaveBtn');
         const modalCancelBtn = document.getElementById('modalCancelBtn');
         const closeModal = document.querySelector('.close-modal');
@@ -662,7 +661,6 @@
             const mixture = brushMixtures[brushIndex] || {a: 33, b: 33, c: 34};
 
             // Atualizar modal
-            modalBrushName.textContent = `T${brushIndex}`;
             modalSliderA.value = mixture.a;
             modalSliderB.value = mixture.b;
             modalSliderC.value = mixture.c;
