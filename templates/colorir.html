@@ -488,27 +488,27 @@
     </div>
 
     <script>
-        // Cores padrão para cada pincel
-        const brushColors = {
-            0: { name: 'T0 - Preto', hex: '#000000' },
-            1: { name: 'T1 - Vermelho', hex: '#FF0000' },
-            2: { name: 'T2 - Verde', hex: '#00AA00' },
-            3: { name: 'T3 - Azul', hex: '#0000FF' },
-            4: { name: 'T4 - Amarelo', hex: '#FFFF00' },
-            5: { name: 'T5 - Magenta', hex: '#FF00FF' },
-            6: { name: 'T6 - Ciano', hex: '#00FFFF' },
-            7: { name: 'T7 - Branco', hex: '#FFFFFF' },
-            8: { name: 'T8 - Laranja', hex: '#FFA500' },
-            9: { name: 'T9 - Rosa', hex: '#FF69B4' },
-            10: { name: 'T10 - Roxo', hex: '#800080' },
-            11: { name: 'T11 - Marrom', hex: '#8B4513' },
-            12: { name: 'T12 - Cinza', hex: '#808080' },
-            13: { name: 'T13 - Vermelho Escuro', hex: '#8B0000' },
-            14: { name: 'T14 - Verde Escuro', hex: '#006400' },
-            15: { name: 'T15 - Azul Escuro', hex: '#00008B' },
-            16: { name: 'T16 - Ouro', hex: '#FFD700' },
-            17: { name: 'T17 - Prata', hex: '#C0C0C0' },
-            18: { name: 'T18 - Cobre', hex: '#B87333' }
+        // Cores padrão para cada tinta (não para pincéis)
+        const tintaDefaultColors = {
+            0: '#000000',
+            1: '#FF0000',
+            2: '#00AA00',
+            3: '#0000FF',
+            4: '#FFFF00',
+            5: '#FF00FF',
+            6: '#00FFFF',
+            7: '#FFFFFF',
+            8: '#FFA500',
+            9: '#FF69B4',
+            10: '#800080',
+            11: '#8B4513',
+            12: '#808080',
+            13: '#8B0000',
+            14: '#006400',
+            15: '#00008B',
+            16: '#FFD700',
+            17: '#C0C0C0',
+            18: '#B87333'
         };
 
         let currentBrushIndex = null;
@@ -538,8 +538,7 @@
             grid.innerHTML = '';
 
             for (let i = 0; i < 19; i++) {
-                const brush = brushColors[i];
-                const customColor = brushCustomColors[i] || brush.hex;
+                const customColor = brushCustomColors[i];
                 const btn = document.createElement('button');
                 btn.className = 'paintbrush-btn';
                 if (i === currentBrushIndex) {
@@ -547,13 +546,17 @@
                 }
                 btn.innerHTML = `
                     <div class="paintbrush-icon">🖌️</div>
-                    <div class="paintbrush-label">${i + 1}</div>
-                    <div class="paintbrush-label" style="font-size: 10px; opacity: 0.8;">${brush.name.split(' - ')[1]}</div>
+                    <div class="paintbrush-label">Pincel ${i + 1}</div>
                 `;
                 
-                // Cor de fundo baseada na cor personalizada do pincel
-                btn.style.borderLeftColor = customColor;
-                btn.style.borderLeftWidth = '4px';
+                // Mostrar cor apenas se tiver sido aplicada uma tinta
+                if (customColor) {
+                    btn.style.borderLeftColor = customColor;
+                    btn.style.borderLeftWidth = '4px';
+                } else {
+                    btn.style.borderLeftColor = '#ddd';
+                    btn.style.borderLeftWidth = '2px';
+                }
 
                 // Clique no pincel = seleciona
                 btn.addEventListener('click', (e) => {
@@ -570,8 +573,7 @@
             container.innerHTML = '';
 
             for (let i = 0; i < 19; i++) {
-                const brush = brushColors[i];
-                const customColor = tintaCustomColors[i] || brush.hex;
+                const customColor = tintaCustomColors[i] || tintaDefaultColors[i];
                 const sample = document.createElement('div');
                 sample.className = 'color-sample';
                 sample.style.position = 'relative';
@@ -607,7 +609,7 @@
                 return;
             }
 
-            const tintaColor = tintaCustomColors[tintaIndex] || brushColors[tintaIndex].hex;
+            const tintaColor = tintaCustomColors[tintaIndex] || tintaDefaultColors[tintaIndex];
             const tintaMixture = brushMixtures[tintaIndex] || {a: 33, b: 33, c: 34};
 
             // Salvar cor personalizada do pincel
@@ -713,7 +715,6 @@
 
         function openMixtureModal(brushIndex) {
             currentEditingBrush = brushIndex;
-            const brush = brushColors[brushIndex];
             const mixture = brushMixtures[brushIndex] || {a: 33, b: 33, c: 34};
 
             // Atualizar modal
@@ -724,7 +725,7 @@
             // Atualizar seletor de cor com a cor atual da tinta
             const customColorPicker = document.getElementById('customColorPicker');
             const tintaColorPreview = document.getElementById('tintaColorPreview');
-            const currentTintaColor = tintaCustomColors[brushIndex] || brush.hex;
+            const currentTintaColor = tintaCustomColors[brushIndex] || tintaDefaultColors[brushIndex];
             if (customColorPicker) {
                 customColorPicker.value = currentTintaColor;
             }
@@ -918,9 +919,12 @@
 
             if (currentBrushIndex !== null) {
                 const brushNum = currentBrushIndex + 1;
-                const customColor = brushCustomColors[currentBrushIndex] || brushColors[currentBrushIndex]?.hex;
-                const colorName = Object.values(brushColors).find(b => b.hex === customColor)?.name?.split(' - ')[1] || 'Personalizada';
-                document.getElementById('currentBrush').textContent = `Pincel ${brushNum} - Tinta: ${colorName}`;
+                const customColor = brushCustomColors[currentBrushIndex];
+                if (customColor) {
+                    document.getElementById('currentBrush').textContent = `Pincel ${brushNum} - Com cor aplicada`;
+                } else {
+                    document.getElementById('currentBrush').textContent = `Pincel ${brushNum} - Sem cor (clique em uma tinta para aplicar)`;
+                }
             } else {
                 document.getElementById('currentBrush').textContent = 'Nenhum - Clique em um pincel para começar';
             }
