@@ -443,7 +443,10 @@
 
                 <div style="text-align: center; margin: 20px 0;">
                     <div style="font-weight: bold; margin-bottom: 10px; color: #333;">Prévia da Cor:</div>
-                    <div id="colorPreview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; border: 3px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #FFFFFF;"></div>
+                    <div id="colorPreview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; border: 3px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #FFFFFF; cursor: pointer; position: relative;" title="Clique para personalizar a cor">
+                        <input type="color" id="customColorPicker" style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; border: none;">
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 8px;">Clique para escolher cor RGB</div>
                 </div>
 
                 <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 12px; border-radius: 5px; font-family: monospace; font-size: 14px; color: #333; word-break: break-all;">
@@ -670,6 +673,12 @@
             modalSliderB.value = mixture.b;
             modalSliderC.value = mixture.c;
 
+            // Atualizar seletor de cor com a cor atual da tinta
+            const customColorPicker = document.getElementById('customColorPicker');
+            if (customColorPicker) {
+                customColorPicker.value = brush.hex;
+            }
+
             updateModalDisplay();
             modal.style.display = 'block';
         }
@@ -795,6 +804,30 @@
                 modal.style.display = 'none';
             }
         });
+
+        // Seletor de cor personalizada
+        const customColorPicker = document.getElementById('customColorPicker');
+        if (customColorPicker) {
+            customColorPicker.addEventListener('change', (e) => {
+                const selectedColor = e.target.value;
+                const colorPreview = document.getElementById('colorPreview');
+                
+                // Atualizar a bolinha de prévia
+                if (colorPreview) {
+                    colorPreview.style.background = selectedColor;
+                }
+                
+                // Atualizar a cor da tinta no array principal
+                if (currentEditingBrush !== null) {
+                    brushColors[currentEditingBrush].hex = selectedColor;
+                    
+                    // Renderizar novamente as amostras de cores
+                    renderColorSamples();
+                    
+                    showMessage(`🎨 Cor da Tinta ${currentEditingBrush + 1} personalizada!`, 'success');
+                }
+            });
+        }
 
         // Atualizar UI
         function updateUI() {
