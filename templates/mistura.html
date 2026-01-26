@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mistura - Chromasistem</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .mistura-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .info-box {
+            background: #f0f8ff;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .filament-controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .filament-item {
+            background: #f9f9f9;
+            padding: 25px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .filament-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .filament-label {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .filament-percentage {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0066cc;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .filament-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .filament-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .filament-slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .slider-track {
+            margin: 15px 0;
+        }
+
+        .sum-total {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .sum-total.valid {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .sum-total.invalid {
+            background: #ffebee;
+            color: #c62828;
+            border-color: #f44336;
+        }
+
+        .sum-value {
+            font-size: 28px;
+            margin-top: 5px;
+        }
+
+        .send-button {
+            width: 100%;
+            margin-top: 25px;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: #4caf50;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .command-preview {
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 12px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            margin-top: 15px;
+            color: #333;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="dashboard-page">
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <img src="{{ url_for('static', filename='images/logo-branca.png') }}" alt="Croma Logo" class="nav-logo">
+                <span class="nav-title">Croma</span>
+            </div>
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('files') }}" class="nav-link">Arquivos</a>
+                <a href="{{ url_for('terminal') }}" class="nav-link">Terminal</a>
+                <a href="{{ url_for('colorir') }}" class="nav-link">🎨 Colorir</a>
+                <a href="{{ url_for('mistura') }}" class="nav-link active">🧪 Mistura</a>
+                <a href="{{ url_for('wifi_page') }}" class="nav-link">Wi-Fi</a>
+            </div>
+            <div class="nav-user">
+                <span>Bem-vindo, <strong>{{ username }}</strong></span>
+                <button id="logoutBtn" class="btn btn-secondary">Sair</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mistura-container">
+        <h1>🧪 Mistura de Filamentos</h1>
+        <p>Ajuste a proporção de cada filamento. A soma deve ser 100%.</p>
+
+        <div class="info-box">
+            <strong>ℹ️ Comando:</strong> M182 A[%] B[%] C[%]<br>
+            Filamento A (Extrusora 1) • Filamento B (Extrusora 2) • Filamento C (Extrusora 3)
+        </div>
+
+        <div class="filament-controls">
+            <!-- Filamento A -->
+            <div class="filament-item">
+                <div class="filament-header">
+                    <span class="filament-label">Filamento A (Extrusora 1)</span>
+                    <span class="filament-percentage" id="percentA">33%</span>
+                </div>
+                <div class="slider-track">
+                    <input type="range" class="filament-slider" id="sliderA" min="0" max="100" value="33">
+                </div>
+            </div>
+
+            <!-- Filamento B -->
+            <div class="filament-item">
+                <div class="filament-header">
+                    <span class="filament-label">Filamento B (Extrusora 2)</span>
+                    <span class="filament-percentage" id="percentB">33%</span>
+                </div>
+                <div class="slider-track">
+                    <input type="range" class="filament-slider" id="sliderB" min="0" max="100" value="33">
+                </div>
+            </div>
+
+            <!-- Filamento C -->
+            <div class="filament-item">
+                <div class="filament-header">
+                    <span class="filament-label">Filamento C (Extrusora 3)</span>
+                    <span class="filament-percentage" id="percentC">34%</span>
+                </div>
+                <div class="slider-track">
+                    <input type="range" class="filament-slider" id="sliderC" min="0" max="100" value="34">
+                </div>
+            </div>
+        </div>
+
+        <!-- Total -->
+        <div class="sum-total valid" id="sumTotal">
+            Total
+            <div class="sum-value" id="sumValue">100%</div>
+        </div>
+
+        <!-- Preview do comando -->
+        <div class="command-preview">
+            <strong>Comando a enviar:</strong><br>
+            <span id="commandPreview">M182 A33 B33 C34</span>
+        </div>
+
+        <!-- Botão Enviar -->
+        <button class="send-button" id="sendBtn">📤 Enviar Mistura</button>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <script>
+        const sliderA = document.getElementById('sliderA');
+        const sliderB = document.getElementById('sliderB');
+        const sliderC = document.getElementById('sliderC');
+        const percentA = document.getElementById('percentA');
+        const percentB = document.getElementById('percentB');
+        const percentC = document.getElementById('percentC');
+        const sumTotal = document.getElementById('sumTotal');
+        const sumValue = document.getElementById('sumValue');
+        const commandPreview = document.getElementById('commandPreview');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusMessage = document.getElementById('statusMessage');
+
+        function updateDisplay() {
+            const a = parseInt(sliderA.value);
+            const b = parseInt(sliderB.value);
+            const c = parseInt(sliderC.value);
+            const sum = a + b + c;
+
+            // Atualizar percentuais
+            percentA.textContent = a + '%';
+            percentB.textContent = b + '%';
+            percentC.textContent = c + '%';
+
+            // Atualizar total
+            sumValue.textContent = sum + '%';
+
+            // Validação
+            if (sum === 100) {
+                sumTotal.classList.remove('invalid');
+                sumTotal.classList.add('valid');
+                sendBtn.disabled = false;
+            } else {
+                sumTotal.classList.add('invalid');
+                sumTotal.classList.remove('valid');
+                sendBtn.disabled = true;
+            }
+
+            // Preview do comando
+            commandPreview.textContent = `M182 A${a} B${b} C${c}`;
+        }
+
+        // Apenas um slider pode ser ajustado por vez
+        // Os outros se adaptam para manter o total em 100%
+        function distributePercentages(changedSlider) {
+            const sliders = [sliderA, sliderB, sliderC];
+            const values = sliders.map(s => parseInt(s.value));
+            const changedIndex = sliders.indexOf(changedSlider);
+
+            if (changedIndex === -1) return;
+
+            // O slider que foi mudado fica com seu novo valor
+            const changed = values[changedIndex];
+            const others = sliders.filter((_, i) => i !== changedIndex);
+            const otherIndices = [0, 1, 2].filter(i => i !== changedIndex);
+
+            // Soma dos outros dois
+            let otherSum = values[otherIndices[0]] + values[otherIndices[1]];
+
+            // Se a soma do novo + outros > 100, precisamos reduzir os outros
+            if (changed > 100) {
+                changedSlider.value = 100;
+                others.forEach(s => s.value = 0);
+            } else if (changed + otherSum > 100) {
+                // Reduzir proporcionalmente os outros
+                const remaining = 100 - changed;
+                if (otherSum > 0) {
+                    const ratio = remaining / otherSum;
+                    others[0].value = Math.floor(values[otherIndices[0]] * ratio);
+                    others[1].value = 100 - changed - others[0].value;
+                } else {
+                    others[0].value = remaining / 2;
+                    others[1].value = remaining / 2;
+                }
+            }
+
+            updateDisplay();
+        }
+
+        // Event listeners
+        sliderA.addEventListener('input', () => distributePercentages(sliderA));
+        sliderB.addEventListener('input', () => distributePercentages(sliderB));
+        sliderC.addEventListener('input', () => distributePercentages(sliderC));
+
+        sendBtn.addEventListener('click', sendMixture);
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+
+        function sendMixture() {
+            const a = parseInt(sliderA.value);
+            const b = parseInt(sliderB.value);
+            const c = parseInt(sliderC.value);
+
+            const command = `M182 A${a} B${b} C${c}`;
+
+            fetch('/api/printer/send-mixture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ command })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(`✅ Mistura enviada: ${command}`, 'success');
+                } else {
+                    showMessage(`❌ Erro: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showMessage(`❌ Erro ao enviar: ${error}`, 'error');
+            });
+        }
+
+        function showMessage(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message ${type}`;
+            setTimeout(() => {
+                statusMessage.className = 'status-message';
+            }, 5000);
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' }).then(() => {
+                window.location.href = '/';
+            });
+        }
+
+        // Inicializar
+        updateDisplay();
+    </script>
+</body>
+</html>

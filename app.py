@@ -1766,6 +1766,13 @@ def colorir():
         return redirect(url_for('login'))
     return render_template('colorir.html', username=session.get('username'))
 
+@app.route('/mistura')
+def mistura():
+    """Página de mistura de filamentos"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('mistura.html', username=session.get('username'))
+
 @app.route('/api/printer/select-brush', methods=['POST'])
 def select_brush():
     """Seleciona um pincel (extrusor T0-T18)"""
@@ -1812,6 +1819,39 @@ def get_current_brush():
         'success': True,
         'brush': current_brush
     })
+
+@app.route('/api/printer/send-mixture', methods=['POST'])
+def send_mixture():
+    """Envia comando M182 de mistura de filamentos"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    try:
+        data = request.get_json()
+        command = data.get('command', '').strip()
+        
+        if not command:
+            return jsonify({'success': False, 'message': 'Comando vazio'}), 400
+        
+        # Validar que é um comando M182
+        if not command.startswith('M182'):
+            return jsonify({'success': False, 'message': 'Comando inválido. Deve ser M182'}), 400
+        
+        # Enviar comando para impressora
+        response = send_gcode(command, wait_for_ok=True, timeout=10)
+        
+        if response:
+            print(f"✓ Mistura enviada: {command}")
+            return jsonify({
+                'success': True,
+                'message': f'Mistura enviada: {command}',
+                'response': response
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Erro ao enviar comando para impressora'}), 500
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/filament/status', methods=['GET'])
 def filament_status_api():
