@@ -1755,6 +1755,64 @@ def wifi_forget():
 
 # ==================== ROTAS DO SENSOR DE FILAMENTO ====================
 
+# ==================== VARIÁVEL GLOBAL DE PINCEL ====================
+
+current_brush = 0  # Pincel T0 como padrão
+
+@app.route('/colorir')
+def colorir():
+    """Página de seleção de pincéis (extrusores)"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('colorir.html', username=session.get('username'))
+
+@app.route('/api/printer/select-brush', methods=['POST'])
+def select_brush():
+    """Seleciona um pincel (extrusor T0-T18)"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    global current_brush
+    
+    try:
+        data = request.get_json()
+        brush = int(data.get('brush', 0))
+        
+        # Validar range de pincéis (0-18)
+        if brush < 0 or brush > 18:
+            return jsonify({'success': False, 'message': 'Pincel inválido (T0-T18)'}), 400
+        
+        # Enviar comando para impressora
+        command = f'T{brush}'
+        response = send_gcode(command, wait_for_ok=True, timeout=10)
+        
+        if response:
+            current_brush = brush
+            print(f"✓ Pincel T{brush} selecionado")
+            return jsonify({
+                'success': True,
+                'message': f'Pincel T{brush} selecionado',
+                'brush': brush
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Erro ao enviar comando para impressora'}), 500
+    
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Formato de pincel inválido'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/current-brush', methods=['GET'])
+def get_current_brush():
+    """Retorna o pincel atualmente selecionado"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    return jsonify({
+        'success': True,
+        'brush': current_brush
+    })
+
 @app.route('/api/filament/status', methods=['GET'])
 def filament_status_api():
     """Retorna status do sensor de filamento"""
