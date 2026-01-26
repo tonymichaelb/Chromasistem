@@ -402,10 +402,7 @@
 
         <div class="status-message" id="statusMessage"></div>
 
-        <h2 style="margin-top: 40px; display: flex; justify-content: space-between; align-items: center;">
-            <span>Cores Padrão dos Pincéis</span>
-            <button class="mixture-btn" id="globalMixtureBtn" title="Configurar mistura" style="position: static; width: 40px; height: 40px; margin: 0;">🔧</button>
-        </h2>
+        <h2 style="margin-top: 40px;">Cores Padrão dos Pincéis</h2>
         <div class="color-samples" id="colorSamples"></div>
 
     </div>
@@ -750,121 +747,10 @@
             });
         });
 
-        // ========== MISTURA DE FILAMENTOS ==========
-        const sliderA = document.getElementById('sliderA');
-        const sliderB = document.getElementById('sliderB');
-        const sliderC = document.getElementById('sliderC');
-        const percentA = document.getElementById('percentA');
-        const percentB = document.getElementById('percentB');
-        const percentC = document.getElementById('percentC');
-        const sumTotal = document.getElementById('sumTotal');
-        const sumValue = document.getElementById('sumValue');
-        const commandPreview = document.getElementById('commandPreview');
-        const sendMixtureBtn = document.getElementById('sendMixtureBtn');
-        const mixtureStatusMessage = document.getElementById('mixtureStatusMessage');
-
-        function updateMixtureDisplay() {
-            const a = parseInt(sliderA.value);
-            const b = parseInt(sliderB.value);
-            const c = parseInt(sliderC.value);
-            const sum = a + b + c;
-
-            // Atualizar percentuais
-            percentA.textContent = a + '%';
-            percentB.textContent = b + '%';
-            percentC.textContent = c + '%';
-
-            // Atualizar total
-            sumValue.textContent = sum + '%';
-
-            // Preview do comando
-            commandPreview.textContent = `M182 A${a} B${b} C${c}`;
-        }
-
-        // Apenas um slider pode ser ajustado por vez
-        // Os outros se adaptam para manter o total em 100%
-        function distributePercentages(changedSlider) {
-            const sliders = [sliderA, sliderB, sliderC];
-            const values = sliders.map(s => parseInt(s.value));
-            const changedIndex = sliders.indexOf(changedSlider);
-
-            if (changedIndex === -1) return;
-
-            // O slider que foi mudado fica com seu novo valor
-            const changed = values[changedIndex];
-            const others = sliders.filter((_, i) => i !== changedIndex);
-            const otherIndices = [0, 1, 2].filter(i => i !== changedIndex);
-
-            // Soma dos outros dois
-            let otherSum = values[otherIndices[0]] + values[otherIndices[1]];
-
-            // Se a soma do novo + outros > 100, precisamos reduzir os outros
-            if (changed > 100) {
-                changedSlider.value = 100;
-                others.forEach(s => s.value = 0);
-            } else if (changed + otherSum > 100) {
-                // Reduzir proporcionalmente os outros
-                const remaining = 100 - changed;
-                if (otherSum > 0) {
-                    const ratio = remaining / otherSum;
-                    others[0].value = Math.floor(values[otherIndices[0]] * ratio);
-                    others[1].value = 100 - changed - others[0].value;
-                } else {
-                    others[0].value = remaining / 2;
-                    others[1].value = remaining / 2;
-                }
-            }
-
-            updateMixtureDisplay();
-        }
-
-        // Event listeners - SLIDERS DEPENDENTES (mantêm soma 100%)
-        sliderA.addEventListener('input', () => distributePercentages(sliderA));
-        sliderB.addEventListener('input', () => distributePercentages(sliderB));
-        sliderC.addEventListener('input', () => distributePercentages(sliderC));
-
-        sendMixtureBtn.addEventListener('click', sendMixture);
-
-        function sendMixture() {
-            const a = parseInt(sliderA.value);
-            const b = parseInt(sliderB.value);
-            const c = parseInt(sliderC.value);
-
-            const command = `M182 A${a} B${b} C${c}`;
-
-            fetch('/api/printer/send-mixture', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ command })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showMixtureMessage(`✅ Mistura enviada: ${command}`, 'success');
-                } else {
-                    showMixtureMessage(`❌ Erro: ${data.message}`, 'error');
-                }
-            })
-            .catch(error => {
-                showMixtureMessage(`❌ Erro ao enviar: ${error}`, 'error');
-            });
-        }
-
-        function showMixtureMessage(message, type) {
-            mixtureStatusMessage.textContent = message;
-            mixtureStatusMessage.className = `status-message ${type}`;
-            setTimeout(() => {
-                mixtureStatusMessage.className = 'status-message';
-            }, 5000);
-        }
-
         // Inicializar
         renderBrushes();
         renderColorSamples();
         loadCurrentBrush();
-        updateMixtureDisplay();
     </script>
 </body>
 </html>
