@@ -156,6 +156,157 @@
             border: none;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+
+        /* Modal de Mistura */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-body {
+            margin: 20px 0;
+        }
+
+        .modal-slider-group {
+            margin-bottom: 25px;
+        }
+
+        .modal-slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .modal-slider-label span:first-child {
+            color: #333;
+        }
+
+        .modal-slider-label span:last-child {
+            color: #0066cc;
+            font-size: 18px;
+        }
+
+        .modal-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .modal-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #0066cc;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-total {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .btn-save {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #45a049;
+        }
+
+        .btn-cancel {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: #da190b;
+        }
+
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: #000;
+        }
+
+        .color-sample {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .color-sample:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body class="dashboard-page">
@@ -249,6 +400,53 @@
         <div class="status-message" id="mixtureStatusMessage"></div>
     </div>
 
+    <!-- Modal de Mistura -->
+    <div id="mixtureModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-header">🧪 Mistura para <span id="modalBrushName">T0</span></div>
+            <div class="modal-body">
+                <div class="modal-slider-group">
+                    <div class="modal-slider-label">
+                        <span>Filamento A (Extrusora 1)</span>
+                        <span id="modalPercentA">33%</span>
+                    </div>
+                    <input type="range" class="modal-slider" id="modalSliderA" min="0" max="100" value="33">
+                </div>
+
+                <div class="modal-slider-group">
+                    <div class="modal-slider-label">
+                        <span>Filamento B (Extrusora 2)</span>
+                        <span id="modalPercentB">33%</span>
+                    </div>
+                    <input type="range" class="modal-slider" id="modalSliderB" min="0" max="100" value="33">
+                </div>
+
+                <div class="modal-slider-group">
+                    <div class="modal-slider-label">
+                        <span>Filamento C (Extrusora 3)</span>
+                        <span id="modalPercentC">34%</span>
+                    </div>
+                    <input type="range" class="modal-slider" id="modalSliderC" min="0" max="100" value="34">
+                </div>
+
+                <div class="modal-total">
+                    Total: <span id="modalTotal">100%</span>
+                </div>
+
+                <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 12px; border-radius: 5px; font-family: monospace; font-size: 14px; color: #333; word-break: break-all;">
+                    <strong>Comando:</strong><br>
+                    <span id="modalCommand">M182 A33 B33 C34</span>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="modal-btn btn-save" id="modalSaveBtn">💾 Salvar</button>
+                <button class="modal-btn btn-cancel" id="modalCancelBtn">✕ Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Cores padrão para cada pincel
         const brushColors = {
@@ -274,6 +472,19 @@
         };
 
         let currentBrushIndex = null;
+
+        // Armazenar misturas para cada pincel (A%, B%, C%)
+        let brushMixtures = JSON.parse(localStorage.getItem('brushMixtures')) || {
+            0: {a: 33, b: 33, c: 34}, 1: {a: 33, b: 33, c: 34}, 2: {a: 33, b: 33, c: 34},
+            3: {a: 33, b: 33, c: 34}, 4: {a: 33, b: 33, c: 34}, 5: {a: 33, b: 33, c: 34},
+            6: {a: 33, b: 33, c: 34}, 7: {a: 33, b: 33, c: 34}, 8: {a: 33, b: 33, c: 34},
+            9: {a: 33, b: 33, c: 34}, 10: {a: 33, b: 33, c: 34}, 11: {a: 33, b: 33, c: 34},
+            12: {a: 33, b: 33, c: 34}, 13: {a: 33, b: 33, c: 34}, 14: {a: 33, b: 33, c: 34},
+            15: {a: 33, b: 33, c: 34}, 16: {a: 33, b: 33, c: 34}, 17: {a: 33, b: 33, c: 34},
+            18: {a: 33, b: 33, c: 34}
+        };
+
+        let currentEditingBrush = null;
 
         // Renderizar os pincéis
         function renderBrushes() {
@@ -312,12 +523,18 @@
                     <div class="color-box" style="background-color: ${brush.hex};"></div>
                     <div class="color-name">${brush.name}</div>
                 `;
+                
+                // Adicionar evento de clique para abrir modal de mistura
+                sample.addEventListener('click', () => openMixtureModal(i));
                 container.appendChild(sample);
             }
         }
 
         // Selecionar pincel
         function selectBrush(index) {
+            // Obter mistura salva para este pincel
+            const mixture = brushMixtures[index] || {a: 33, b: 33, c: 34};
+            
             // Enviar comando T para a impressora
             fetch('/api/printer/select-brush', {
                 method: 'POST',
@@ -332,6 +549,9 @@
                     currentBrushIndex = index;
                     updateUI();
                     showMessage(`✅ Pincel T${index} selecionado!`, 'success');
+                    
+                    // Enviar mistura associada
+                    sendMixtureForBrush(index, mixture);
                 } else {
                     showMessage(`❌ Erro: ${data.message}`, 'error');
                 }
@@ -340,6 +560,130 @@
                 showMessage(`❌ Erro ao selecionar pincel: ${error}`, 'error');
             });
         }
+
+        function sendMixtureForBrush(brushIndex, mixture) {
+            const command = `M182 A${mixture.a} B${mixture.b} C${mixture.c}`;
+            
+            fetch('/api/printer/send-mixture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ command })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`✓ Mistura enviada para T${brushIndex}: ${command}`);
+                }
+            })
+            .catch(error => console.error('Erro ao enviar mistura:', error));
+        }
+
+        // ========== FUNÇÕES DO MODAL ==========
+        const modal = document.getElementById('mixtureModal');
+        const modalSliderA = document.getElementById('modalSliderA');
+        const modalSliderB = document.getElementById('modalSliderB');
+        const modalSliderC = document.getElementById('modalSliderC');
+        const modalPercentA = document.getElementById('modalPercentA');
+        const modalPercentB = document.getElementById('modalPercentB');
+        const modalPercentC = document.getElementById('modalPercentC');
+        const modalTotal = document.getElementById('modalTotal');
+        const modalCommand = document.getElementById('modalCommand');
+        const modalBrushName = document.getElementById('modalBrushName');
+        const modalSaveBtn = document.getElementById('modalSaveBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        const closeModal = document.querySelector('.close-modal');
+
+        function openMixtureModal(brushIndex) {
+            currentEditingBrush = brushIndex;
+            const brush = brushColors[brushIndex];
+            const mixture = brushMixtures[brushIndex] || {a: 33, b: 33, c: 34};
+
+            // Atualizar modal
+            modalBrushName.textContent = `T${brushIndex}`;
+            modalSliderA.value = mixture.a;
+            modalSliderB.value = mixture.b;
+            modalSliderC.value = mixture.c;
+
+            updateModalDisplay();
+            modal.style.display = 'block';
+        }
+
+        function updateModalDisplay() {
+            const a = parseInt(modalSliderA.value);
+            const b = parseInt(modalSliderB.value);
+            const c = parseInt(modalSliderC.value);
+            const sum = a + b + c;
+
+            modalPercentA.textContent = a + '%';
+            modalPercentB.textContent = b + '%';
+            modalPercentC.textContent = c + '%';
+            modalTotal.textContent = sum + '%';
+            modalCommand.textContent = `M182 A${a} B${b} C${c}`;
+        }
+
+        function distributeModalPercentages(changedSlider) {
+            const sliders = [modalSliderA, modalSliderB, modalSliderC];
+            const values = sliders.map(s => parseInt(s.value));
+            const changedIndex = sliders.indexOf(changedSlider);
+
+            if (changedIndex === -1) return;
+
+            const changed = values[changedIndex];
+            const others = sliders.filter((_, i) => i !== changedIndex);
+            const otherIndices = [0, 1, 2].filter(i => i !== changedIndex);
+            let otherSum = values[otherIndices[0]] + values[otherIndices[1]];
+
+            if (changed > 100) {
+                changedSlider.value = 100;
+                others.forEach(s => s.value = 0);
+            } else if (changed + otherSum > 100) {
+                const remaining = 100 - changed;
+                if (otherSum > 0) {
+                    const ratio = remaining / otherSum;
+                    others[0].value = Math.floor(values[otherIndices[0]] * ratio);
+                    others[1].value = 100 - changed - others[0].value;
+                } else {
+                    others[0].value = remaining / 2;
+                    others[1].value = remaining / 2;
+                }
+            }
+
+            updateModalDisplay();
+        }
+
+        modalSliderA.addEventListener('input', () => distributeModalPercentages(modalSliderA));
+        modalSliderB.addEventListener('input', () => distributeModalPercentages(modalSliderB));
+        modalSliderC.addEventListener('input', () => distributeModalPercentages(modalSliderC));
+
+        modalSaveBtn.addEventListener('click', () => {
+            const mixture = {
+                a: parseInt(modalSliderA.value),
+                b: parseInt(modalSliderB.value),
+                c: parseInt(modalSliderC.value)
+            };
+
+            brushMixtures[currentEditingBrush] = mixture;
+            localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
+            
+            showMessage(`✅ Mistura T${currentEditingBrush} salva: M182 A${mixture.a} B${mixture.b} C${mixture.c}`, 'success');
+            modal.style.display = 'none';
+        });
+
+        modalCancelBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        closeModal.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
 
         // Atualizar UI
         function updateUI() {
@@ -416,10 +760,47 @@
             commandPreview.textContent = `M182 A${a} B${b} C${c}`;
         }
 
-        // Event listeners - SLIDERS INDEPENDENTES
-        sliderA.addEventListener('input', updateMixtureDisplay);
-        sliderB.addEventListener('input', updateMixtureDisplay);
-        sliderC.addEventListener('input', updateMixtureDisplay);
+        // Apenas um slider pode ser ajustado por vez
+        // Os outros se adaptam para manter o total em 100%
+        function distributePercentages(changedSlider) {
+            const sliders = [sliderA, sliderB, sliderC];
+            const values = sliders.map(s => parseInt(s.value));
+            const changedIndex = sliders.indexOf(changedSlider);
+
+            if (changedIndex === -1) return;
+
+            // O slider que foi mudado fica com seu novo valor
+            const changed = values[changedIndex];
+            const others = sliders.filter((_, i) => i !== changedIndex);
+            const otherIndices = [0, 1, 2].filter(i => i !== changedIndex);
+
+            // Soma dos outros dois
+            let otherSum = values[otherIndices[0]] + values[otherIndices[1]];
+
+            // Se a soma do novo + outros > 100, precisamos reduzir os outros
+            if (changed > 100) {
+                changedSlider.value = 100;
+                others.forEach(s => s.value = 0);
+            } else if (changed + otherSum > 100) {
+                // Reduzir proporcionalmente os outros
+                const remaining = 100 - changed;
+                if (otherSum > 0) {
+                    const ratio = remaining / otherSum;
+                    others[0].value = Math.floor(values[otherIndices[0]] * ratio);
+                    others[1].value = 100 - changed - others[0].value;
+                } else {
+                    others[0].value = remaining / 2;
+                    others[1].value = remaining / 2;
+                }
+            }
+
+            updateMixtureDisplay();
+        }
+
+        // Event listeners - SLIDERS DEPENDENTES (mantêm soma 100%)
+        sliderA.addEventListener('input', () => distributePercentages(sliderA));
+        sliderB.addEventListener('input', () => distributePercentages(sliderB));
+        sliderC.addEventListener('input', () => distributePercentages(sliderC));
 
         sendMixtureBtn.addEventListener('click', sendMixture);
 
