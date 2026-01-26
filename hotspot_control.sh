@@ -1,29 +1,26 @@
 #!/bin/bash
 
-if [ "$1" == "stop" ]; then
-    echo "📴 Parando hotspot..."
-    pkill -f hostapd 2>/dev/null || true
-    systemctl stop dnsmasq 2>/dev/null || true
-    echo "✅ Hotspot parado. Conecte no Wi-Fi com internet."
-    echo ""
-    echo "Quando terminar as atualizações, reinicie o serviço:"
-    echo "  sudo systemctl restart chromasistem"
-    
-elif [ "$1" == "start" ]; then
+case "$1" in
+  start)
     echo "📡 Ativando hotspot..."
-    systemctl start dnsmasq 2>/dev/null || true
+    systemctl restart dnsmasq 2>/dev/null || true
     sleep 1
     hostapd -B /etc/hostapd/hostapd.conf 2>/dev/null || true
     echo "✅ Hotspot ativado"
-    
-elif [ "$1" == "status" ]; then
-    echo "🔍 Status do hotspot:"
-    pgrep -f hostapd >/dev/null && echo "  ✅ Hostapd: ativo" || echo "  ❌ Hostapd: parado"
-    systemctl is-active dnsmasq >/dev/null && echo "  ✅ DHCP: ativo" || echo "  ❌ DHCP: parado"
-else
-    echo "Uso: $0 {stop|start|status}"
-    echo ""
-    echo "  stop   - Desativa hotspot para conectar no Wi-Fi"
-    echo "  start  - Ativa hotspot novamente"
-    echo "  status - Mostra status do hotspot"
-fi
+    ;;
+  stop)
+    echo "📴 Parando hotspot..."
+    pkill -f hostapd 2>/dev/null || true
+    systemctl stop dnsmasq 2>/dev/null || true
+    echo "✅ Hotspot parado"
+    ;;
+  status)
+    pgrep -f hostapd >/dev/null && echo "✅ hostapd: ativo" || echo "❌ hostapd: parado"
+    systemctl is-active dnsmasq >/dev/null && echo "✅ dnsmasq: ativo" || echo "❌ dnsmasq: parado"
+    ;;
+  *)
+    echo "Uso: $0 {start|stop|status}"
+    exit 1
+    ;;
+
+esac
