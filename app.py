@@ -74,7 +74,7 @@ printer_serial = None
 # Variável global para estado do filamento
 filament_status = {
     'has_filament': True,
-    'sensor_enabled': GPIO_AVAILABLE,
+    'sensor_enabled': True,  # Sempre habilitado (funciona no Raspberry com GPIO)
     'last_check': None
 }
 
