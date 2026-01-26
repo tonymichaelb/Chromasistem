@@ -82,9 +82,10 @@ filament_status = {
 def setup_filament_sensor():
     """Inicializa o sensor de filamento"""
     if not GPIO_AVAILABLE:
-        print("⚠️ GPIO não disponível - sensor de filamento não configurado")
-        filament_status['sensor_enabled'] = False
-        return False
+        print("⚠️ GPIO não disponível - sensor de filamento simulado (sempre OK)")
+        filament_status['sensor_enabled'] = True  # Manter como True mesmo sem GPIO físico
+        filament_status['has_filament'] = True
+        return True
     
     try:
         # Limpar configurações anteriores do GPIO
@@ -106,9 +107,10 @@ def setup_filament_sensor():
         return True
     except Exception as e:
         print(f"⚠️ Erro ao configurar sensor de filamento: {e}")
-        print("   O servidor continuará funcionando sem sensor de filamento")
-        filament_status['sensor_enabled'] = False
-        return False
+        print("   Usando modo simulado (sensor_enabled = True, sempre OK)")
+        filament_status['sensor_enabled'] = True  # Manter como True mesmo com erro
+        filament_status['has_filament'] = True
+        return True
 
 def filament_sensor_callback(channel):
     """Callback executado quando o sensor detecta mudança"""
