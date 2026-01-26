@@ -190,6 +190,15 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS brush_mixtures (
+            brush_id INTEGER PRIMARY KEY,
+            a_percent INTEGER DEFAULT 33,
+            b_percent INTEGER DEFAULT 33,
+            c_percent INTEGER DEFAULT 34,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -1851,6 +1860,72 @@ def send_mixture():
             return jsonify({'success': False, 'message': 'Erro ao enviar comando para impressora'}), 500
     
     except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/save-brush-mixtures', methods=['POST'])
+def save_brush_mixtures():
+    """Salva as misturas de todos os pincéis no banco de dados"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    try:
+        data = request.get_json()
+        mixtures = data.get('mixtures', {})
+        
+        # Salvar no banco de dados
+        for brush_index, mixture in mixtures.items():
+            try:
+                brush_id = int(brush_index)
+                if 0 <= brush_id <= 18:
+                    # Usar SQL para salvar/atualizar
+                    db.session.execute(f"""
+                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent)
+                        VALUES ({brush_id}, {mixture['a']}, {mixture['b']}, {mixture['c']})
+                    """)
+            except (ValueError, KeyError):
+                continue
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Misturas salvas com sucesso'})
+    
+    except Exception as e:
+        print(f"Erro ao salvar misturas: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/load-brush-mixtures', methods=['GET'])
+def load_brush_mixtures():
+    """Carrega as misturas de todos os pincéis do banco de dados"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    
+    try:
+        # Tentar carregar do banco de dados
+        try:
+            result = db.session.execute("SELECT brush_id, a_percent, b_percent, c_percent FROM brush_mixtures")
+            rows = result.fetchall()
+            
+            mixtures = {}
+            for row in rows:
+                mixtures[str(row[0])] = {
+                    'a': row[1],
+                    'b': row[2],
+                    'c': row[3]
+                }
+            
+            if mixtures:
+                return jsonify({'success': True, 'mixtures': mixtures})
+        except:
+            pass
+        
+        # Se não houver dados no banco, retornar padrão
+        default_mixtures = {}
+        for i in range(19):
+            default_mixtures[str(i)] = {'a': 33, 'b': 33, 'c': 34}
+        
+        return jsonify({'success': True, 'mixtures': default_mixtures})
+    
+    except Exception as e:
+        print(f"Erro ao carregar misturas: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/filament/status', methods=['GET'])

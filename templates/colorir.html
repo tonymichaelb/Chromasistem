@@ -726,7 +726,27 @@
             brushMixtures[currentEditingBrush] = mixture;
             localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
             
-            showMessage(`✅ Mistura T${currentEditingBrush} salva: M182 A${mixture.a} B${mixture.b} C${mixture.c}`, 'success');
+            // Salvar no servidor
+            fetch('/api/printer/save-brush-mixtures', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ mixtures: brushMixtures })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage(`✅ Mistura T${currentEditingBrush} salva: M182 A${mixture.a} B${mixture.b} C${mixture.c}`, 'success');
+                } else {
+                    showMessage(`⚠️ Mistura salva localmente, mas erro ao sincronizar servidor`, 'info');
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao salvar no servidor:', error);
+                showMessage(`⚠️ Mistura salva localmente`, 'info');
+            });
+            
             modal.style.display = 'none';
         });
 
@@ -787,6 +807,20 @@
                 .catch(error => console.error('Erro ao carregar pincel atual:', error));
         }
 
+        // Carregar misturas do servidor
+        function loadBrushMixtures() {
+            fetch('/api/printer/load-brush-mixtures')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.mixtures) {
+                        brushMixtures = data.mixtures;
+                        localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
+                        console.log('✓ Misturas carregadas do servidor');
+                    }
+                })
+                .catch(error => console.error('Erro ao carregar misturas:', error));
+        }
+
         // Logout
         document.getElementById('logoutBtn').addEventListener('click', () => {
             fetch('/logout', { method: 'POST' }).then(() => {
@@ -795,6 +829,7 @@
         });
 
         // Inicializar
+        loadBrushMixtures();  // Carregar misturas do servidor primeiro
         renderBrushes();
         renderColorSamples();
         loadCurrentBrush();
