@@ -515,6 +515,9 @@
         
         // Armazenar cores personalizadas para cada pincel
         let brushCustomColors = JSON.parse(localStorage.getItem('brushCustomColors')) || {};
+        
+        // Armazenar cores personalizadas para cada tinta
+        let tintaCustomColors = JSON.parse(localStorage.getItem('tintaCustomColors')) || {};
 
         // Armazenar misturas para cada pincel (A%, B%, C%)
         let brushMixtures = JSON.parse(localStorage.getItem('brushMixtures')) || {
@@ -568,11 +571,12 @@
 
             for (let i = 0; i < 19; i++) {
                 const brush = brushColors[i];
+                const customColor = tintaCustomColors[i] || brush.hex;
                 const sample = document.createElement('div');
                 sample.className = 'color-sample';
                 sample.style.position = 'relative';
                 sample.innerHTML = `
-                    <div class="color-box" style="background-color: ${brush.hex};"></div>
+                    <div class="color-box" style="background-color: ${customColor};"></div>
                     <div class="color-name">${i + 1}</div>
                     <button class="color-mixture-btn" title="Configurar mistura">🔧</button>
                 `;
@@ -603,7 +607,7 @@
                 return;
             }
 
-            const tintaColor = brushColors[tintaIndex].hex;
+            const tintaColor = tintaCustomColors[tintaIndex] || brushColors[tintaIndex].hex;
             const tintaMixture = brushMixtures[tintaIndex] || {a: 33, b: 33, c: 34};
 
             // Salvar cor personalizada do pincel
@@ -628,7 +632,8 @@
                 },
                 body: JSON.stringify({ 
                     mixtures: brushMixtures,
-                    colors: brushCustomColors 
+                    colors: brushCustomColors,
+                    tintaColors: tintaCustomColors
                 })
             })
             .then(response => response.json())
@@ -702,7 +707,6 @@
         const modalPercentB = document.getElementById('modalPercentB');
         const modalPercentC = document.getElementById('modalPercentC');
         const modalTotal = document.getElementById('modalTotal');
-        const modalCommand = document.getElementById('modalCommand');
         const modalSaveBtn = document.getElementById('modalSaveBtn');
         const modalCancelBtn = document.getElementById('modalCancelBtn');
         const closeModal = document.querySelector('.close-modal');
@@ -720,11 +724,12 @@
             // Atualizar seletor de cor com a cor atual da tinta
             const customColorPicker = document.getElementById('customColorPicker');
             const tintaColorPreview = document.getElementById('tintaColorPreview');
+            const currentTintaColor = tintaCustomColors[brushIndex] || brush.hex;
             if (customColorPicker) {
-                customColorPicker.value = brush.hex;
+                customColorPicker.value = currentTintaColor;
             }
             if (tintaColorPreview) {
-                tintaColorPreview.style.background = brush.hex;
+                tintaColorPreview.style.background = currentTintaColor;
             }
 
             updateModalDisplay();
@@ -741,7 +746,6 @@
             modalPercentB.textContent = b + '%';
             modalPercentC.textContent = c + '%';
             modalTotal.textContent = sum + '%';
-            modalCommand.textContent = `M182 A${a} B${b} C${c}`;
             
             // Atualizar prévia de cor (mistura CMY)
             updateColorPreview(a, b, c);
@@ -815,7 +819,7 @@
             brushMixtures[currentEditingBrush] = mixture;
             localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
             
-            // Salvar no servidor (misturas + cores personalizadas)
+            // Salvar no servidor (misturas + cores personalizadas dos pincéis e tintas)
             fetch('/api/printer/save-brush-mixtures', {
                 method: 'POST',
                 headers: {
@@ -823,7 +827,8 @@
                 },
                 body: JSON.stringify({ 
                     mixtures: brushMixtures,
-                    colors: brushCustomColors 
+                    colors: brushCustomColors,
+                    tintaColors: tintaCustomColors
                 })
             })
             .then(response => response.json())
@@ -868,9 +873,10 @@
                     tintaColorPreview.style.background = selectedColor;
                 }
                 
-                // Atualizar a cor da tinta no array principal
+                // Atualizar a cor da tinta personalizada
                 if (currentEditingBrush !== null) {
-                    brushColors[currentEditingBrush].hex = selectedColor;
+                    tintaCustomColors[currentEditingBrush] = selectedColor;
+                    localStorage.setItem('tintaCustomColors', JSON.stringify(tintaCustomColors));
                     
                     // Renderizar novamente as amostras de cores
                     renderColorSamples();
@@ -883,7 +889,8 @@
                         },
                         body: JSON.stringify({ 
                             mixtures: brushMixtures,
-                            colors: brushCustomColors 
+                            colors: brushCustomColors,
+                            tintaColors: tintaCustomColors
                         })
                     })
                     .then(response => response.json())
@@ -951,10 +958,16 @@
                         brushMixtures = data.mixtures;
                         localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
                         
-                        // Carregar cores personalizadas também
+                        // Carregar cores personalizadas dos pincéis
                         if (data.colors) {
                             brushCustomColors = data.colors;
                             localStorage.setItem('brushCustomColors', JSON.stringify(brushCustomColors));
+                        }
+                        
+                        // Carregar cores personalizadas das tintas
+                        if (data.tintaColors) {
+                            tintaCustomColors = data.tintaColors;
+                            localStorage.setItem('tintaCustomColors', JSON.stringify(tintaCustomColors));
                         }
                         
                         console.log('✓ Misturas e cores carregadas do servidor');

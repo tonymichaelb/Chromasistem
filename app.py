@@ -197,6 +197,7 @@ def init_db():
             b_percent INTEGER DEFAULT 33,
             c_percent INTEGER DEFAULT 34,
             custom_color TEXT,
+            tinta_color TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -1873,6 +1874,7 @@ def save_brush_mixtures():
         data = request.get_json()
         mixtures = data.get('mixtures', {})
         colors = data.get('colors', {})
+        tintaColors = data.get('tintaColors', {})
         
         # Salvar no banco de dados usando SQLite direto
         conn = sqlite3.connect(DB_NAME)
@@ -1883,10 +1885,11 @@ def save_brush_mixtures():
                 brush_id = int(brush_index)
                 if 0 <= brush_id <= 18:
                     custom_color = colors.get(brush_index, None)
+                    tinta_color = tintaColors.get(brush_index, None)
                     cursor.execute("""
-                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent, custom_color, updated_at)
-                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (brush_id, mixture['a'], mixture['b'], mixture['c'], custom_color))
+                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent, custom_color, tinta_color, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (brush_id, mixture['a'], mixture['b'], mixture['c'], custom_color, tinta_color))
             except (ValueError, KeyError):
                 continue
         
@@ -1909,23 +1912,26 @@ def load_brush_mixtures():
         try:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent, custom_color FROM brush_mixtures")
+            cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent, custom_color, tinta_color FROM brush_mixtures")
             rows = cursor.fetchall()
             conn.close()
             
             mixtures = {}
             colors = {}
+            tintaColors = {}
             for row in rows:
                 mixtures[str(row[0])] = {
                     'a': row[1],
                     'b': row[2],
                     'c': row[3]
                 }
-                if row[4]:  # Se houver cor personalizada
+                if row[4]:  # Se houver cor personalizada do pincel
                     colors[str(row[0])] = row[4]
+                if row[5]:  # Se houver cor personalizada da tinta
+                    tintaColors[str(row[0])] = row[5]
             
             if mixtures:
-                return jsonify({'success': True, 'mixtures': mixtures, 'colors': colors})
+                return jsonify({'success': True, 'mixtures': mixtures, 'colors': colors, 'tintaColors': tintaColors})
         except:
             pass
         
