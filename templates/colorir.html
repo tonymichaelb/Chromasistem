@@ -479,6 +479,9 @@
         };
 
         let currentBrushIndex = null;
+        
+        // Armazenar cores personalizadas para cada pincel
+        let brushCustomColors = JSON.parse(localStorage.getItem('brushCustomColors')) || {};
 
         // Armazenar misturas para cada pincel (A%, B%, C%)
         let brushMixtures = JSON.parse(localStorage.getItem('brushMixtures')) || {
@@ -500,16 +503,20 @@
 
             for (let i = 0; i < 19; i++) {
                 const brush = brushColors[i];
+                const customColor = brushCustomColors[i] || brush.hex;
                 const btn = document.createElement('button');
                 btn.className = 'paintbrush-btn';
+                if (i === currentBrushIndex) {
+                    btn.classList.add('active');
+                }
                 btn.innerHTML = `
                     <div class="paintbrush-icon">🖌️</div>
                     <div class="paintbrush-label">${i + 1}</div>
                     <div class="paintbrush-label" style="font-size: 10px; opacity: 0.8;">${brush.name.split(' - ')[1]}</div>
                 `;
                 
-                // Efeito de cor de fundo sutil
-                btn.style.borderLeftColor = brush.hex;
+                // Cor de fundo baseada na cor personalizada do pincel
+                btn.style.borderLeftColor = customColor;
                 btn.style.borderLeftWidth = '4px';
 
                 // Clique no pincel = seleciona
@@ -537,6 +544,14 @@
                     <button class="color-mixture-btn" title="Configurar mistura">🔧</button>
                 `;
                 
+                // Evento de clique na tinta = mudar cor do pincel selecionado
+                sample.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('color-mixture-btn')) {
+                        return; // Não fazer nada se clicou na catraca
+                    }
+                    applyTintaToBrush(i);
+                });
+                
                 // Adicionar evento de clique na catraca
                 const mixtureBtn = sample.querySelector('.color-mixture-btn');
                 mixtureBtn.addEventListener('click', (e) => {
@@ -546,6 +561,33 @@
                 
                 container.appendChild(sample);
             }
+        }
+
+        // Aplicar cor da tinta ao pincel selecionado
+        function applyTintaToBrush(tintaIndex) {
+            if (currentBrushIndex === null) {
+                showMessage('❌ Selecione um pincel primeiro!', 'error');
+                return;
+            }
+
+            const tintaColor = brushColors[tintaIndex].hex;
+            const tintaMixture = brushMixtures[tintaIndex] || {a: 33, b: 33, c: 34};
+
+            // Salvar cor personalizada do pincel
+            brushCustomColors[currentBrushIndex] = tintaColor;
+            localStorage.setItem('brushCustomColors', JSON.stringify(brushCustomColors));
+
+            // Atualizar mistura do pincel com a mistura da tinta
+            brushMixtures[currentBrushIndex] = tintaMixture;
+            localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
+
+            // Re-renderizar pincéis para mostrar nova cor
+            renderBrushes();
+
+            // Enviar mistura associada
+            sendMixtureForBrush(currentBrushIndex, tintaMixture);
+
+            showMessage(`✅ Pincel ${currentBrushIndex + 1} agora tem a cor da Tinta ${tintaIndex + 1}!`, 'success');
         }
 
         // Selecionar pincel
@@ -566,7 +608,7 @@
                 if (data.success) {
                     currentBrushIndex = index;
                     updateUI();
-                    showMessage(`✅ Pincel T${index} selecionado!`, 'success');
+                    showMessage(`✅ Pincel ${index + 1} (T${index}) selecionado! Agora escolha uma tinta.`, 'success');
                     
                     // Enviar mistura associada
                     sendMixtureForBrush(index, mixture);
@@ -713,8 +755,14 @@
                 }
             });
 
-            const brushName = brushColors[currentBrushIndex]?.name || 'Nenhum';
-            document.getElementById('currentBrush').textContent = brushName;
+            if (currentBrushIndex !== null) {
+                const brushNum = currentBrushIndex + 1;
+                const customColor = brushCustomColors[currentBrushIndex] || brushColors[currentBrushIndex]?.hex;
+                const colorName = Object.values(brushColors).find(b => b.hex === customColor)?.name?.split(' - ')[1] || 'Customizada';
+                document.getElementById('currentBrush').textContent = `Pincel ${brushNum} (T${currentBrushIndex}) - Cor: ${colorName}`;
+            } else {
+                document.getElementById('currentBrush').textContent = 'Nenhum pincel selecionado';
+            }
         }
 
         // Mostrar mensagem
