@@ -1872,20 +1872,23 @@ def save_brush_mixtures():
         data = request.get_json()
         mixtures = data.get('mixtures', {})
         
-        # Salvar no banco de dados
+        # Salvar no banco de dados usando SQLite direto
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        
         for brush_index, mixture in mixtures.items():
             try:
                 brush_id = int(brush_index)
                 if 0 <= brush_id <= 18:
-                    # Usar SQL para salvar/atualizar
-                    db.session.execute(f"""
-                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent)
-                        VALUES ({brush_id}, {mixture['a']}, {mixture['b']}, {mixture['c']})
-                    """)
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (brush_id, mixture['a'], mixture['b'], mixture['c']))
             except (ValueError, KeyError):
                 continue
         
-        db.session.commit()
+        conn.commit()
+        conn.close()
         return jsonify({'success': True, 'message': 'Misturas salvas com sucesso'})
     
     except Exception as e:
@@ -1901,8 +1904,11 @@ def load_brush_mixtures():
     try:
         # Tentar carregar do banco de dados
         try:
-            result = db.session.execute("SELECT brush_id, a_percent, b_percent, c_percent FROM brush_mixtures")
-            rows = result.fetchall()
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent FROM brush_mixtures")
+            rows = cursor.fetchall()
+            conn.close()
             
             mixtures = {}
             for row in rows:
