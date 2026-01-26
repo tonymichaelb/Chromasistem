@@ -390,19 +390,35 @@
     </nav>
 
     <div class="colorir-container">
-        <h1>🎨 Colorir - Seleção de Pincéis (Extrusores)</h1>
-        <p>Selecione um pincel para trocar o extrusor ativo. Cada pincel corresponde a um extrusor (T0-T18).</p>
-
-        <div class="current-brush">
-            Pincel Selecionado: <span id="currentBrush">T0 (Nenhum)</span>
+        <h1>🎨 Colorir - Sistema de Pincéis e Tintas</h1>
+        
+        <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+            <h3 style="margin-top: 0; color: #1976D2;">📖 Como Funciona (Passo a Passo)</h3>
+            <ol style="line-height: 1.8; color: #333;">
+                <li><strong>Escolha um Pincel:</strong> Clique em um dos 19 pincéis abaixo. Cada pincel representa uma ferramenta de impressão diferente.</li>
+                <li><strong>Selecione uma Tinta:</strong> Depois de escolher o pincel, clique em uma das tintas coloridas. O pincel ficará com a cor da tinta escolhida.</li>
+                <li><strong>Personalize a Mistura (Opcional):</strong> Clique na engrenagem 🔧 em qualquer tinta para ajustar a mistura de cores (Ciano, Magenta e Amarelo) e criar sua própria cor personalizada.</li>
+            </ol>
+            <p style="margin-bottom: 0; font-size: 14px; color: #666;">
+                <strong>💡 Dica:</strong> As configurações são salvas automaticamente. Quando você reiniciar, tudo estará como deixou!
+            </p>
         </div>
 
-        <h2>Pincel</h2>
+        <div class="current-brush">
+            Pincel Selecionado: <span id="currentBrush">Nenhum - Clique em um pincel para começar</span>
+        </div>
+
+        <h2>Pincéis Disponíveis (1 a 19)</h2>
+        <p style="color: #666; font-size: 14px; margin-top: -10px;">Clique em um pincel para selecioná-lo. A borda colorida mostra qual tinta está aplicada.</p>
         <div class="paintbrushes-grid" id="paintbrushesGrid"></div>
 
         <div class="status-message" id="statusMessage"></div>
 
-        <h2 style="margin-top: 40px;">Tinta</h2>
+        <h2 style="margin-top: 40px;">Tintas Disponíveis (1 a 19)</h2>
+        <p style="color: #666; font-size: 14px; margin-top: -10px;">
+            Clique em uma tinta para aplicar no pincel selecionado. 
+            Use a engrenagem 🔧 para personalizar a mistura de cores.
+        </p>
         <div class="color-samples" id="colorSamples"></div>
 
     </div>
@@ -411,7 +427,11 @@
     <div id="mixtureModal" class="modal">
         <div class="modal-content">
             <span class="close-modal">&times;</span>
-            <div class="modal-header">🧪 Mistura</div>
+            <div class="modal-header">🧪 Configuração de Mistura de Cores</div>
+            <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #856404;">
+                <strong>ℹ️ Como usar:</strong> Mova os controles deslizantes para ajustar as porcentagens de cada cor. 
+                O total sempre será 100%. A primeira bolinha mostra a prévia da mistura, e a segunda permite escolher uma cor RGB personalizada.
+            </div>
             <div class="modal-body">
                 <div class="modal-slider-group">
                     <div class="modal-slider-label">
@@ -441,17 +461,22 @@
                     Total: <span id="modalTotal">100%</span>
                 </div>
 
-                <div style="text-align: center; margin: 20px 0;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">Prévia da Cor:</div>
-                    <div id="colorPreview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; border: 3px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #FFFFFF; cursor: pointer; position: relative;" title="Clique para personalizar a cor">
-                        <input type="color" id="customColorPicker" style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; border: none;">
+                <div style="display: flex; justify-content: center; gap: 30px; margin: 20px 0;">
+                    <!-- Bolinha 1: Prévia da Mistura CMY -->
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold; margin-bottom: 10px; color: #333; font-size: 13px;">🎨 Prévia da Mistura</div>
+                        <div id="colorPreview" style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #FFFFFF;"></div>
+                        <div style="font-size: 11px; color: #666; margin-top: 8px; max-width: 120px;">Resultado da combinação das 3 cores</div>
                     </div>
-                    <div style="font-size: 11px; color: #666; margin-top: 8px;">Clique para escolher cor RGB</div>
-                </div>
 
-                <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 12px; border-radius: 5px; font-family: monospace; font-size: 14px; color: #333; word-break: break-all;">
-                    <strong>Comando:</strong><br>
-                    <span id="modalCommand">M182 A33 B33 C34</span>
+                    <!-- Bolinha 2: Cor da Tinta (Personalizável) -->
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold; margin-bottom: 10px; color: #333; font-size: 13px;">🌈 Cor Personalizada</div>
+                        <div style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: #FFFFFF; cursor: pointer; position: relative; margin: 0 auto;" id="tintaColorPreview" title="Clique para escolher qualquer cor RGB">
+                            <input type="color" id="customColorPicker" style="opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; border: none;">
+                        </div>
+                        <div style="font-size: 11px; color: #666; margin-top: 8px; max-width: 120px;">Clique para escolher qualquer cor</div>
+                    </div>
                 </div>
             </div>
 
@@ -574,7 +599,7 @@
         // Aplicar cor da tinta ao pincel selecionado
         function applyTintaToBrush(tintaIndex) {
             if (currentBrushIndex === null) {
-                showMessage('❌ Selecione um pincel primeiro!', 'error');
+                showMessage('❌ Primeiro você precisa escolher um pincel! Clique em um dos números acima.', 'error');
                 return;
             }
 
@@ -594,6 +619,25 @@
 
             // Enviar mistura associada
             sendMixtureForBrush(currentBrushIndex, tintaMixture);
+            
+            // Salvar cores no servidor
+            fetch('/api/printer/save-brush-mixtures', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    mixtures: brushMixtures,
+                    colors: brushCustomColors 
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('✓ Cores sincronizadas com servidor');
+                }
+            })
+            .catch(error => console.error('Erro ao sincronizar:', error));
 
             showMessage(`✅ Pincel ${currentBrushIndex + 1} agora tem a cor da Tinta ${tintaIndex + 1}!`, 'success');
         }
@@ -607,7 +651,7 @@
             // Obter mistura salva para este pincel
             const mixture = brushMixtures[index] || {a: 33, b: 33, c: 34};
             
-            showMessage(`✅ Pincel ${index + 1} (T${index}) selecionado! Agora escolha uma tinta.`, 'success');
+            showMessage(`✅ Pincel ${index + 1} selecionado! Agora clique em uma tinta colorida abaixo para aplicar.`, 'success');
             
             // Enviar comando T para a impressora (em background)
             fetch('/api/printer/select-brush', {
@@ -675,8 +719,12 @@
 
             // Atualizar seletor de cor com a cor atual da tinta
             const customColorPicker = document.getElementById('customColorPicker');
+            const tintaColorPreview = document.getElementById('tintaColorPreview');
             if (customColorPicker) {
                 customColorPicker.value = brush.hex;
+            }
+            if (tintaColorPreview) {
+                tintaColorPreview.style.background = brush.hex;
             }
 
             updateModalDisplay();
@@ -767,25 +815,28 @@
             brushMixtures[currentEditingBrush] = mixture;
             localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
             
-            // Salvar no servidor
+            // Salvar no servidor (misturas + cores personalizadas)
             fetch('/api/printer/save-brush-mixtures', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ mixtures: brushMixtures })
+                body: JSON.stringify({ 
+                    mixtures: brushMixtures,
+                    colors: brushCustomColors 
+                })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showMessage(`✅ Mistura T${currentEditingBrush} salva: M182 A${mixture.a} B${mixture.b} C${mixture.c}`, 'success');
+                    showMessage(`✅ Configurações salvas com sucesso!`, 'success');
                 } else {
-                    showMessage(`⚠️ Mistura salva localmente, mas erro ao sincronizar servidor`, 'info');
+                    showMessage(`⚠️ Salvo localmente, mas erro ao sincronizar servidor`, 'info');
                 }
             })
             .catch(error => {
                 console.error('Erro ao salvar no servidor:', error);
-                showMessage(`⚠️ Mistura salva localmente`, 'info');
+                showMessage(`⚠️ Salvo localmente`, 'info');
             });
             
             modal.style.display = 'none';
@@ -810,11 +861,11 @@
         if (customColorPicker) {
             customColorPicker.addEventListener('change', (e) => {
                 const selectedColor = e.target.value;
-                const colorPreview = document.getElementById('colorPreview');
+                const tintaColorPreview = document.getElementById('tintaColorPreview');
                 
-                // Atualizar a bolinha de prévia
-                if (colorPreview) {
-                    colorPreview.style.background = selectedColor;
+                // Atualizar a bolinha de cor da tinta
+                if (tintaColorPreview) {
+                    tintaColorPreview.style.background = selectedColor;
                 }
                 
                 // Atualizar a cor da tinta no array principal
@@ -823,6 +874,25 @@
                     
                     // Renderizar novamente as amostras de cores
                     renderColorSamples();
+                    
+                    // Salvar no servidor
+                    fetch('/api/printer/save-brush-mixtures', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            mixtures: brushMixtures,
+                            colors: brushCustomColors 
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            console.log('✓ Cor da tinta sincronizada');
+                        }
+                    })
+                    .catch(error => console.error('Erro ao sincronizar:', error));
                     
                     showMessage(`🎨 Cor da Tinta ${currentEditingBrush + 1} personalizada!`, 'success');
                 }
@@ -842,10 +912,10 @@
             if (currentBrushIndex !== null) {
                 const brushNum = currentBrushIndex + 1;
                 const customColor = brushCustomColors[currentBrushIndex] || brushColors[currentBrushIndex]?.hex;
-                const colorName = Object.values(brushColors).find(b => b.hex === customColor)?.name?.split(' - ')[1] || 'Customizada';
-                document.getElementById('currentBrush').textContent = `Pincel ${brushNum} (T${currentBrushIndex}) - Cor: ${colorName}`;
+                const colorName = Object.values(brushColors).find(b => b.hex === customColor)?.name?.split(' - ')[1] || 'Personalizada';
+                document.getElementById('currentBrush').textContent = `Pincel ${brushNum} - Tinta: ${colorName}`;
             } else {
-                document.getElementById('currentBrush').textContent = 'Nenhum pincel selecionado';
+                document.getElementById('currentBrush').textContent = 'Nenhum - Clique em um pincel para começar';
             }
         }
 
@@ -880,7 +950,16 @@
                     if (data.success && data.mixtures) {
                         brushMixtures = data.mixtures;
                         localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
-                        console.log('✓ Misturas carregadas do servidor');
+                        
+                        // Carregar cores personalizadas também
+                        if (data.colors) {
+                            brushCustomColors = data.colors;
+                            localStorage.setItem('brushCustomColors', JSON.stringify(brushCustomColors));
+                        }
+                        
+                        console.log('✓ Misturas e cores carregadas do servidor');
+                        renderBrushes(); // Re-renderizar com as cores carregadas
+                        renderColorSamples();
                     }
                 })
                 .catch(error => console.error('Erro ao carregar misturas:', error));
@@ -894,9 +973,7 @@
         });
 
         // Inicializar
-        loadBrushMixtures();  // Carregar misturas do servidor primeiro
-        renderBrushes();
-        renderColorSamples();
+        loadBrushMixtures();  // Carregar misturas e cores do servidor (já renderiza)
         loadCurrentBrush();
     </script>
 </body>

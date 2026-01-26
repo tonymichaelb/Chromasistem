@@ -196,6 +196,7 @@ def init_db():
             a_percent INTEGER DEFAULT 33,
             b_percent INTEGER DEFAULT 33,
             c_percent INTEGER DEFAULT 34,
+            custom_color TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -1864,13 +1865,14 @@ def send_mixture():
 
 @app.route('/api/printer/save-brush-mixtures', methods=['POST'])
 def save_brush_mixtures():
-    """Salva as misturas de todos os pincéis no banco de dados"""
+    """Salva as misturas e cores de todos os pincéis no banco de dados"""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
     try:
         data = request.get_json()
         mixtures = data.get('mixtures', {})
+        colors = data.get('colors', {})
         
         # Salvar no banco de dados usando SQLite direto
         conn = sqlite3.connect(DB_NAME)
@@ -1880,16 +1882,17 @@ def save_brush_mixtures():
             try:
                 brush_id = int(brush_index)
                 if 0 <= brush_id <= 18:
+                    custom_color = colors.get(brush_index, None)
                     cursor.execute("""
-                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent, updated_at)
-                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (brush_id, mixture['a'], mixture['b'], mixture['c']))
+                        INSERT OR REPLACE INTO brush_mixtures (brush_id, a_percent, b_percent, c_percent, custom_color, updated_at)
+                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (brush_id, mixture['a'], mixture['b'], mixture['c'], custom_color))
             except (ValueError, KeyError):
                 continue
         
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'message': 'Misturas salvas com sucesso'})
+        return jsonify({'success': True, 'message': 'Misturas e cores salvas com sucesso'})
     
     except Exception as e:
         print(f"Erro ao salvar misturas: {str(e)}")
@@ -1897,7 +1900,7 @@ def save_brush_mixtures():
 
 @app.route('/api/printer/load-brush-mixtures', methods=['GET'])
 def load_brush_mixtures():
-    """Carrega as misturas de todos os pincéis do banco de dados"""
+    """Carrega as misturas e cores de todos os pincéis do banco de dados"""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
@@ -1906,20 +1909,23 @@ def load_brush_mixtures():
         try:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent FROM brush_mixtures")
+            cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent, custom_color FROM brush_mixtures")
             rows = cursor.fetchall()
             conn.close()
             
             mixtures = {}
+            colors = {}
             for row in rows:
                 mixtures[str(row[0])] = {
                     'a': row[1],
                     'b': row[2],
                     'c': row[3]
                 }
+                if row[4]:  # Se houver cor personalizada
+                    colors[str(row[0])] = row[4]
             
             if mixtures:
-                return jsonify({'success': True, 'mixtures': mixtures})
+                return jsonify({'success': True, 'mixtures': mixtures, 'colors': colors})
         except:
             pass
         
@@ -1928,7 +1934,7 @@ def load_brush_mixtures():
         for i in range(19):
             default_mixtures[str(i)] = {'a': 33, 'b': 33, 'c': 34}
         
-        return jsonify({'success': True, 'mixtures': default_mixtures})
+        return jsonify({'success': True, 'mixtures': default_mixtures, 'colors': {}})
     
     except Exception as e:
         print(f"Erro ao carregar misturas: {str(e)}")
