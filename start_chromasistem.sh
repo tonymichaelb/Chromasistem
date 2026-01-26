@@ -6,9 +6,9 @@ echo "🚀 Iniciando Chromasistem..."
 # Desbloqueia Wi-Fi por segurança
 rfkill unblock wifi || true
 
-# Aguarda 3 minutos tentando encontrar Wi-Fi
-echo "⏳ Procurando redes Wi-Fi disponíveis (180 segundos)..."
-WIFI_TIMEOUT=180
+# Aguarda 1 minuto tentando encontrar Wi-Fi
+echo "⏳ Procurando redes Wi-Fi disponíveis (60 segundos)..."
+WIFI_TIMEOUT=60
 WIFI_FOUND=0
 
 for i in $(seq 1 $WIFI_TIMEOUT); do
@@ -37,7 +37,7 @@ done
 
 # Se não encontrou Wi-Fi, ativa hotspot
 if [ $WIFI_FOUND -eq 0 ]; then
-    echo "❌ Wi-Fi não encontrado após 3 minutos. Ativando hotspot..."
+    echo "❌ Wi-Fi não encontrado após 1 minuto. Ativando hotspot..."
 
     # País/regulatório para o Wi-Fi (necessário para hostapd)
     iw reg set BR || true
