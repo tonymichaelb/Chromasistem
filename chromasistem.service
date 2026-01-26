@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
+User=root
 WorkingDirectory=/home/pi/Chromasistem
 Environment="PATH=/home/pi/Chromasistem/venv/bin"
 ExecStart=/home/pi/Chromasistem/venv/bin/python app.py
