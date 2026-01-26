@@ -367,6 +367,125 @@
         .color-sample:hover {
             transform: scale(1.05);
         }
+
+        .help-icon {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 999;
+        }
+
+        .help-icon:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .help-modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .help-modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .help-modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .help-modal-header h2 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .help-close {
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .help-close:hover {
+            transform: scale(1.2);
+        }
+
+        .help-modal-body {
+            padding: 30px;
+            line-height: 1.8;
+            color: #333;
+        }
+
+        .help-modal-body ol {
+            margin: 20px 0;
+            padding-left: 20px;
+        }
+
+        .help-modal-body li {
+            margin-bottom: 15px;
+        }
+
+        .help-modal-body strong {
+            color: #667eea;
+        }
+
+        .help-tip {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #856404;
+        }
     </style>
 </head>
 <body class="dashboard-page">
@@ -391,19 +510,10 @@
 
     <div class="colorir-container">
         <h1>🎨 Colorir - Sistema de Pincéis e Tintas</h1>
+        <p style="text-align: center; color: #666; margin-top: -10px; margin-bottom: 20px;">
+            <em>Clique no ícone ❓ no canto inferior direito para ver como funciona</em>
+        </p>
         
-        <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
-            <h3 style="margin-top: 0; color: #1976D2;">📖 Como Funciona (Passo a Passo)</h3>
-            <ol style="line-height: 1.8; color: #333;">
-                <li><strong>Escolha um Pincel:</strong> Clique em um dos 19 pincéis abaixo. Cada pincel representa uma ferramenta de impressão diferente.</li>
-                <li><strong>Selecione uma Tinta:</strong> Depois de escolher o pincel, clique em uma das tintas coloridas. O pincel ficará com a cor da tinta escolhida.</li>
-                <li><strong>Personalize a Mistura (Opcional):</strong> Clique na engrenagem 🔧 em qualquer tinta para ajustar a mistura de cores (Ciano, Magenta e Amarelo) e criar sua própria cor personalizada.</li>
-            </ol>
-            <p style="margin-bottom: 0; font-size: 14px; color: #666;">
-                <strong>💡 Dica:</strong> As configurações são salvas automaticamente. Quando você reiniciar, tudo estará como deixou!
-            </p>
-        </div>
-
         <div class="current-brush">
             Pincel Selecionado: <span id="currentBrush">Nenhum - Clique em um pincel para começar</span>
         </div>
@@ -421,6 +531,39 @@
         </p>
         <div class="color-samples" id="colorSamples"></div>
 
+    </div>
+
+    <!-- Ícone de Ajuda Flutuante -->
+    <div class="help-icon" id="helpIcon" title="Clique para ver como funciona">❓</div>
+
+    <!-- Modal de Ajuda -->
+    <div id="helpModal" class="help-modal">
+        <div class="help-modal-content">
+            <div class="help-modal-header">
+                <h2>📖 Como Funciona</h2>
+                <span class="help-close" id="helpClose">&times;</span>
+            </div>
+            <div class="help-modal-body">
+                <p><strong>Bem-vindo ao Sistema de Pincéis e Tintas!</strong> Siga os passos abaixo para começar:</p>
+                
+                <ol>
+                    <li><strong>Escolha um Pincel:</strong> Clique em um dos 19 pincéis disponíveis. Cada pincel representa uma ferramenta de impressão diferente. Os pincéis começam sem cor até que você aplique uma tinta.</li>
+                    
+                    <li><strong>Selecione uma Tinta:</strong> Depois de escolher o pincel, clique em uma das 19 tintas coloridas disponíveis. O pincel ficará com a cor da tinta escolhida.</li>
+                    
+                    <li><strong>Personalize a Mistura (Opcional):</strong> Clique na engrenagem 🔧 em qualquer tinta para abrir o configurador. Você pode:
+                        <ul style="margin-top: 10px;">
+                            <li>Ajustar as porcentagens de Ciano, Magenta e Amarelo</li>
+                            <li>Escolher uma cor RGB personalizada clicando na bolinha colorida</li>
+                        </ul>
+                    </li>
+                </ol>
+                
+                <div class="help-tip">
+                    <strong>💡 Dica Importante:</strong> Todas as configurações são salvas automaticamente no servidor. Quando você recarregar a página ou reiniciar o sistema, suas cores e misturas personalizadas estarão preservadas!
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal de Mistura -->
@@ -992,6 +1135,25 @@
         // Inicializar
         loadBrushMixtures();  // Carregar misturas e cores do servidor (já renderiza)
         loadCurrentBrush();
+
+        // ========== MODAL DE AJUDA ==========
+        const helpIcon = document.getElementById('helpIcon');
+        const helpModal = document.getElementById('helpModal');
+        const helpClose = document.getElementById('helpClose');
+
+        helpIcon.addEventListener('click', () => {
+            helpModal.style.display = 'block';
+        });
+
+        helpClose.addEventListener('click', () => {
+            helpModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === helpModal) {
+                helpModal.style.display = 'none';
+            }
+        });
     </script>
 </body>
 </html>
