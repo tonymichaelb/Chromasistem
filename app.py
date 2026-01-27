@@ -1095,8 +1095,16 @@ def printer_pause():
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
     print_paused = True
-    print("⏸️ Impressão pausada pelo usuário")
-    return jsonify({'success': True, 'message': 'Impressão pausada'})
+    
+    # Mover para X0 Y0 quando pausar (afastar cabeça da peça)
+    try:
+        send_gcode('G90')  # Modo absoluto
+        send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
+        print("⏸️ Impressão pausada - cabeça movida para X0 Y0")
+    except Exception as e:
+        print(f"⚠️ Erro ao mover cabeça durante pausa: {e}")
+    
+    return jsonify({'success': True, 'message': 'Impressão pausada e cabeça movida para X0 Y0'})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
