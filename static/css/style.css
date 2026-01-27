@@ -399,6 +399,21 @@ body {
     margin-bottom: 4px;
 }
 
+.temp-current {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.temp-target {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+
 .temp-value {
     color: var(--text-primary);
     font-size: 16px;
