@@ -343,15 +343,18 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     elif cmd.startswith('T'):  # Trocar extrusora - pode levar até 10s
                         timeout = 10
                     elif cmd.startswith(('G0 ', 'G1 ')) and ' E' in cmd:
-                        timeout = 5  # Comandos de extrusão (retração/extrusão) - timeout maior
+                        timeout = 10  # Comandos de extrusão - aumentado de 5 para 10
                     elif cmd.startswith(('G0 ', 'G1 ')):
-                        timeout = 3  # Movimentos XYZ - timeout aumentado para Pi Zero 2W
+                        timeout = 10  # Movimentos XYZ - aumentado de 3 para 10 segundos
                     else:
-                        timeout = 3  # Timeout padrão
+                        timeout = 5  # Timeout padrão - aumentado de 3 para 5
                 
                 # Para comandos de movimento (G0/G1), não limpar buffer - mais rápido
                 if not cmd.startswith(('G0 ', 'G1 ')):
-                    printer_serial.reset_input_buffer()
+                    try:
+                        printer_serial.reset_input_buffer()
+                    except:
+                        pass
                     time.sleep(0.01)  # Aguardar limpeza do buffer
                 
                 # Enviar comando
