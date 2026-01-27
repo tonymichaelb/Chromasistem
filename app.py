@@ -39,6 +39,7 @@ commands_history = deque(maxlen=100)
 # Flags de controle de impressão
 print_paused = False
 print_stopped = False
+print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
 
 # Configuração do banco de dados
@@ -1090,11 +1091,12 @@ def printer_status():
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
-    global print_paused
+    global print_paused, print_paused_by_filament
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
     print_paused = True
+    print_paused_by_filament = False  # Pausa manual, não por filamento
     
     # Mover para X0 Y0 quando pausar (afastar cabeça da peça)
     try:
@@ -1108,11 +1110,19 @@ def printer_pause():
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
-    global print_paused
+    global print_paused, print_paused_by_filament
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
+    # Se pausado por falta de filamento, verificar se filamento está de volta
+    if print_paused_by_filament:
+        filament_status = check_filament_sensor()
+        if not filament_status.get('has_filament'):
+            return jsonify({'success': False, 'message': '❌ Filamento ainda não detectado! Verifique a carga.'}), 400
+        print("✓ Filamento detectado! Retomando impressão...")
+    
     print_paused = False
+    print_paused_by_filament = False
     print("▶️ Impressão retomada pelo usuário")
     return jsonify({'success': True, 'message': 'Impressão retomada'})
 
@@ -1505,6 +1515,35 @@ def print_file(file_id):
                     if print_stopped:
                         print("✗ Impressão PARADA durante pausa")
                         break
+                    
+                    # ✅ VERIFICAR FILAMENTO - Pausar automaticamente se faltar
+                    filament_check = check_filament_sensor()
+                    if not filament_check.get('has_filament'):
+                        global print_paused_by_filament
+                        print_paused_by_filament = True
+                        print_paused = True
+                        print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
+                        print("   Recarregue o filamento e clique em CONTINUAR para retomar.")
+                        
+                        # Mover para X0 Y0 quando pausar por filamento
+                        try:
+                            send_gcode('G90')
+                            send_gcode('G0 X0 Y0 F3000')
+                            print("   Cabeça movida para X0 Y0")
+                        except:
+                            pass
+                        
+                        # Aguardar até que filamento volte E usuário clique continuar
+                        while print_paused and not print_stopped:
+                            filament_check = check_filament_sensor()
+                            if filament_check.get('has_filament') and not print_paused_by_filament:
+                                print("✓ Filamento recarregado e impressão retomada!")
+                                break
+                            time.sleep(1)
+                        
+                        if print_stopped:
+                            print("✗ Impressão PARADA durante falta de filamento")
+                            break
                     
                     # Remover comentários e espaços
                     line = line.split(';')[0].strip()
