@@ -1116,9 +1116,9 @@ def printer_pause():
     
     # Pausar impressão com retração de filamento para evitar gotejamento
     try:
-        send_gcode('G91')  # Modo relativo
+        send_gcode('M83')  # Modo relativo para extrusor
         send_gcode('G1 E-5 F3000')  # Retrair 5mm de filamento
-        send_gcode('G90')  # Voltar ao modo absoluto
+        send_gcode('G90')  # Modo absoluto para XYZ
         send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
         print("⏸️ Impressão pausada - filamento retraído e cabeça movida para X0 Y0")
     except Exception as e:
@@ -1139,11 +1139,12 @@ def printer_resume():
             return jsonify({'success': False, 'message': '❌ Filamento ainda não detectado! Verifique a carga.'}), 400
         print("✓ Filamento detectado! Retomando impressão...")
     
-    # Desretrair filamento (compensar a retração feita na pausa) e voltar à posição anterior
+    # Desretrair filamento (compensar a retração feita na pausa) e restaurar modo absoluto
     try:
-        send_gcode('G91')  # Modo relativo
+        send_gcode('M83')  # Modo relativo para extrusor
         send_gcode('G1 E5 F3000')  # Desretrair 5mm de filamento
-        send_gcode('G90')  # Voltar ao modo absoluto
+        send_gcode('M82')  # Voltar ao modo absoluto para extrusor
+        send_gcode('G90')  # Garantir modo absoluto para XYZ
         print("▶️ Filamento desretraído - Impressão retomada")
     except Exception as e:
         print(f"⚠️ Erro ao retomar: {e}")
@@ -1553,9 +1554,9 @@ def print_file(file_id):
                         
                         # Pausar com retração para evitar gotejamento
                         try:
-                            send_gcode('G91')  # Modo relativo
+                            send_gcode('M83')  # Modo relativo para extrusor
                             send_gcode('G1 E-5 F3000')  # Retrair 5mm
-                            send_gcode('G90')  # Modo absoluto
+                            send_gcode('G90')  # Modo absoluto para XYZ
                             send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
                             print("   Filamento retraído e cabeça movida para X0 Y0")
                         except:
@@ -1568,9 +1569,10 @@ def print_file(file_id):
                                 print("✓ Filamento recarregado e impressão retomada!")
                                 # Desretrair filamento
                                 try:
-                                    send_gcode('G91')  # Modo relativo
+                                    send_gcode('M83')  # Modo relativo para extrusor
                                     send_gcode('G1 E5 F3000')  # Desretrair 5mm
-                                    send_gcode('G90')  # Modo absoluto
+                                    send_gcode('M82')  # Voltar ao modo absoluto para extrusor
+                                    send_gcode('G90')  # Garantir modo absoluto para XYZ
                                     print("   Filamento desretraído - continuando impressão")
                                 except:
                                     pass
