@@ -422,38 +422,50 @@
                 const response = await fetch('/api/printer/commands-history');
                 const data = await response.json();
                 
-                if (data.success && data.count > lastHistoryCount) {
-                    // Mostrar apenas os novos comandos
-                    const newCommands = data.history.slice(lastHistoryCount);
-                    newCommands.forEach(item => {
-                        const terminal = document.getElementById('terminalOutput');
-                        const line = document.createElement('div');
-                        line.style.marginBottom = '5px';
-                        
-                        if (item.type === 'sent') {
-                            line.style.color = '#ffff00';
-                            // Extrair apenas a hora do timestamp ISO (HH:MM:SS)
-                            const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
-                                hour: '2-digit', 
-                                minute: '2-digit', 
-                                second: '2-digit' 
-                            });
-                            line.textContent = '> ' + item.command + ' [' + timeStr + ']';
-                        } else if (item.type === 'response') {
-                            line.style.color = '#00ff00';
-                            const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
-                                hour: '2-digit', 
-                                minute: '2-digit', 
-                                second: '2-digit' 
-                            });
-                            line.textContent = '< ' + item.command + ' [' + timeStr + ']';
-                        }
-                        
-                        terminal.appendChild(line);
-                        terminal.scrollTop = terminal.scrollHeight;
-                    });
+                if (data.success && data.history && data.history.length > 0) {
+                    const terminal = document.getElementById('terminalOutput');
                     
-                    lastHistoryCount = data.count;
+                    // Se houver novos comandos (count aumentou)
+                    if (data.count > lastHistoryCount) {
+                        // Mostrar apenas os novos comandos
+                        const newCommands = data.history.slice(lastHistoryCount);
+                        newCommands.forEach(item => {
+                            const line = document.createElement('div');
+                            line.style.marginBottom = '5px';
+                            
+                            if (item.type === 'sent') {
+                                line.style.color = '#ffff00';
+                                const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit', 
+                                    second: '2-digit' 
+                                });
+                                line.textContent = '> ' + item.command + ' [' + timeStr + ']';
+                            } else if (item.type === 'response') {
+                                line.style.color = '#00ff00';
+                                const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit', 
+                                    second: '2-digit' 
+                                });
+                                line.textContent = '< ' + item.command + ' [' + timeStr + ']';
+                            } else if (item.type === 'error') {
+                                line.style.color = '#ff0000';
+                                const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit', 
+                                    second: '2-digit' 
+                                });
+                                line.textContent = '! ' + item.command + ' [' + timeStr + ']';
+                            }
+                            
+                            terminal.appendChild(line);
+                        });
+                        
+                        // Auto-scroll para o final
+                        terminal.scrollTop = terminal.scrollHeight;
+                        lastHistoryCount = data.count;
+                    }
                 }
             } catch (error) {
                 console.error('Erro ao atualizar histórico de comandos:', error);
