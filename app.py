@@ -1114,15 +1114,17 @@ def printer_pause():
     print_paused = True
     print_paused_by_filament = False  # Pausa manual, não por filamento
     
-    # Mover para X0 Y0 quando pausar (afastar cabeça da peça)
+    # Pausar impressão com retração de filamento para evitar gotejamento
     try:
-        send_gcode('G90')  # Modo absoluto
+        send_gcode('G91')  # Modo relativo
+        send_gcode('G1 E-5 F3000')  # Retrair 5mm de filamento
+        send_gcode('G90')  # Voltar ao modo absoluto
         send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
-        print("⏸️ Impressão pausada - cabeça movida para X0 Y0")
+        print("⏸️ Impressão pausada - filamento retraído e cabeça movida para X0 Y0")
     except Exception as e:
-        print(f"⚠️ Erro ao mover cabeça durante pausa: {e}")
+        print(f"⚠️ Erro ao pausar: {e}")
     
-    return jsonify({'success': True, 'message': 'Impressão pausada e cabeça movida para X0 Y0'})
+    return jsonify({'success': True, 'message': 'Impressão pausada - filamento retraído e cabeça movida para X0 Y0'})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
@@ -1137,10 +1139,18 @@ def printer_resume():
             return jsonify({'success': False, 'message': '❌ Filamento ainda não detectado! Verifique a carga.'}), 400
         print("✓ Filamento detectado! Retomando impressão...")
     
+    # Desretrair filamento (compensar a retração feita na pausa) e voltar à posição anterior
+    try:
+        send_gcode('G91')  # Modo relativo
+        send_gcode('G1 E5 F3000')  # Desretrair 5mm de filamento
+        send_gcode('G90')  # Voltar ao modo absoluto
+        print("▶️ Filamento desretraído - Impressão retomada")
+    except Exception as e:
+        print(f"⚠️ Erro ao retomar: {e}")
+    
     print_paused = False
     print_paused_by_filament = False
-    print("▶️ Impressão retomada pelo usuário")
-    return jsonify({'success': True, 'message': 'Impressão retomada'})
+    return jsonify({'success': True, 'message': 'Impressão retomada com filamento desretraído'})
 
 @app.route('/api/printer/connect', methods=['POST'])
 def printer_connect():
@@ -1541,11 +1551,13 @@ def print_file(file_id):
                         print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
                         print("   Recarregue o filamento e clique em CONTINUAR para retomar.")
                         
-                        # Mover para X0 Y0 quando pausar por filamento
+                        # Pausar com retração para evitar gotejamento
                         try:
-                            send_gcode('G90')
-                            send_gcode('G0 X0 Y0 F3000')
-                            print("   Cabeça movida para X0 Y0")
+                            send_gcode('G91')  # Modo relativo
+                            send_gcode('G1 E-5 F3000')  # Retrair 5mm
+                            send_gcode('G90')  # Modo absoluto
+                            send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
+                            print("   Filamento retraído e cabeça movida para X0 Y0")
                         except:
                             pass
                         
@@ -1554,6 +1566,14 @@ def print_file(file_id):
                             filament_check = check_filament_sensor()
                             if filament_check.get('has_filament') and not print_paused_by_filament:
                                 print("✓ Filamento recarregado e impressão retomada!")
+                                # Desretrair filamento
+                                try:
+                                    send_gcode('G91')  # Modo relativo
+                                    send_gcode('G1 E5 F3000')  # Desretrair 5mm
+                                    send_gcode('G90')  # Modo absoluto
+                                    print("   Filamento desretraído - continuando impressão")
+                                except:
+                                    pass
                                 break
                             time.sleep(1)
                         
