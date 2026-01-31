@@ -362,6 +362,15 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                 printer_serial.write(command.encode())
                 printer_serial.flush()
                 
+                # Log do comando enviado no histórico
+                global commands_history, history_lock
+                with history_lock:
+                    commands_history.append({
+                        'time': datetime.now().isoformat(),
+                        'command': command.strip(),
+                        'type': 'sent'
+                    })
+                
                 if not wait_for_ok:
                     return 'ok'
                 
@@ -376,6 +385,13 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                             responses.append(line)
                             # Se recebeu 'ok', terminou
                             if 'ok' in line.lower():
+                                # Log da resposta no histórico
+                                with history_lock:
+                                    commands_history.append({
+                                        'time': datetime.now().isoformat(),
+                                        'command': '\n'.join(responses),
+                                        'type': 'response'
+                                    })
                                 return '\n'.join(responses)
                     else:
                         time.sleep(0.01)  # Pequena pausa para não saturar CPU
