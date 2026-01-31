@@ -432,10 +432,21 @@
                         
                         if (item.type === 'sent') {
                             line.style.color = '#ffff00';
-                            line.textContent = '> ' + item.command + ' [' + new Date(item.timestamp).toLocaleTimeString() + ']';
+                            // Extrair apenas a hora do timestamp ISO (HH:MM:SS)
+                            const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
+                                hour: '2-digit', 
+                                minute: '2-digit', 
+                                second: '2-digit' 
+                            });
+                            line.textContent = '> ' + item.command + ' [' + timeStr + ']';
                         } else if (item.type === 'response') {
                             line.style.color = '#00ff00';
-                            line.textContent = '< ' + item.command + ' [' + new Date(item.timestamp).toLocaleTimeString() + ']';
+                            const timeStr = new Date(item.time).toLocaleTimeString('pt-BR', { 
+                                hour: '2-digit', 
+                                minute: '2-digit', 
+                                second: '2-digit' 
+                            });
+                            line.textContent = '< ' + item.command + ' [' + timeStr + ']';
                         }
                         
                         terminal.appendChild(line);
