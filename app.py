@@ -41,6 +41,7 @@ print_paused = False
 print_stopped = False
 print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
+pause_position = {'x': None, 'y': None, 'z': None}  # Salvar posição antes da pausa
 
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
@@ -1107,15 +1108,33 @@ def printer_status():
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
-    global print_paused, print_paused_by_filament
+    global print_paused, print_paused_by_filament, pause_position
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
     print_paused = True
     print_paused_by_filament = False  # Pausa manual, não por filamento
     
-    # Apenas mover cabeça para X0 Y0 (sem retração de filamento)
+    # Salvar posição atual e mover para X0 Y0
     try:
+        # Obter posição atual com M114
+        position_response = send_gcode('M114')
+        print(f"📍 Resposta M114: {position_response}")
+        
+        # Parsear resposta M114 (formato: "X:100.0 Y:50.0 Z:10.0 E:5.0")
+        if position_response:
+            import re
+            x_match = re.search(r'X:([0-9.-]+)', position_response)
+            y_match = re.search(r'Y:([0-9.-]+)', position_response)
+            z_match = re.search(r'Z:([0-9.-]+)', position_response)
+            
+            if x_match and y_match and z_match:
+                pause_position['x'] = float(x_match.group(1))
+                pause_position['y'] = float(y_match.group(1))
+                pause_position['z'] = float(z_match.group(1))
+                print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+        
+        # Mover para X0 Y0
         send_gcode('G90')  # Modo absoluto
         send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
         print("⏸️ Impressão pausada - cabeça movida para X0 Y0")
@@ -1126,7 +1145,7 @@ def printer_pause():
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
-    global print_paused, print_paused_by_filament
+    global print_paused, print_paused_by_filament, pause_position
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
@@ -1136,6 +1155,16 @@ def printer_resume():
         if not filament_status.get('has_filament'):
             return jsonify({'success': False, 'message': '❌ Filamento ainda não detectado! Verifique a carga.'}), 400
         print("✓ Filamento detectado! Retomando impressão...")
+    
+    # Restaurar posição salva antes de retomar
+    if pause_position['x'] is not None:
+        try:
+            send_gcode('G90')  # Modo absoluto
+            # Restaurar posição sem extrusão
+            send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
+            print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+        except Exception as e:
+            print(f"⚠️ Erro ao restaurar posição: {e}")
     
     print_paused = False
     print_paused_by_filament = False
@@ -1535,25 +1564,50 @@ def print_file(file_id):
                     # ✅ VERIFICAR FILAMENTO - Pausar automaticamente se faltar
                     filament_check = check_filament_sensor()
                     if not filament_check.get('has_filament'):
-                        global print_paused_by_filament
+                        global print_paused_by_filament, pause_position
                         print_paused_by_filament = True
                         print_paused = True
                         print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
                         print("   Recarregue o filamento e clique em CONTINUAR para retomar.")
                         
-                        # Apenas mover cabeça (sem retração)
+                        # Salvar posição atual e mover cabeça
                         try:
+                            # Obter posição atual com M114
+                            position_response = send_gcode('M114')
+                            print(f"📍 Resposta M114: {position_response}")
+                            
+                            # Parsear resposta M114
+                            if position_response:
+                                import re
+                                x_match = re.search(r'X:([0-9.-]+)', position_response)
+                                y_match = re.search(r'Y:([0-9.-]+)', position_response)
+                                z_match = re.search(r'Z:([0-9.-]+)', position_response)
+                                
+                                if x_match and y_match and z_match:
+                                    pause_position['x'] = float(x_match.group(1))
+                                    pause_position['y'] = float(y_match.group(1))
+                                    pause_position['z'] = float(z_match.group(1))
+                                    print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+                            
                             send_gcode('G90')  # Modo absoluto
                             send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
                             print("   Cabeça movida para X0 Y0")
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"   ⚠️ Erro ao pausar: {e}")
                         
                         # Aguardar até que filamento volte E usuário clique continuar
                         while print_paused and not print_stopped:
                             filament_check = check_filament_sensor()
                             if filament_check.get('has_filament') and not print_paused_by_filament:
                                 print("✓ Filamento recarregado e impressão retomada!")
+                                # Restaurar posição antes de continuar
+                                if pause_position['x'] is not None:
+                                    try:
+                                        send_gcode('G90')
+                                        send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
+                                        print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+                                    except Exception as e:
+                                        print(f"⚠️ Erro ao restaurar posição: {e}")
                                 break
                             time.sleep(1)
                         
