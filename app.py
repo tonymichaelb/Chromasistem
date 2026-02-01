@@ -1114,17 +1114,15 @@ def printer_pause():
     print_paused = True
     print_paused_by_filament = False  # Pausa manual, não por filamento
     
-    # Pausar impressão com retração de filamento para evitar gotejamento
+    # Apenas mover cabeça para X0 Y0 (sem retração de filamento)
     try:
-        send_gcode('M83')  # Modo relativo para extrusor
-        send_gcode('G1 E-5 F3000')  # Retrair 5mm de filamento
-        send_gcode('G90')  # Modo absoluto para XYZ
+        send_gcode('G90')  # Modo absoluto
         send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
-        print("⏸️ Impressão pausada - filamento retraído e cabeça movida para X0 Y0")
+        print("⏸️ Impressão pausada - cabeça movida para X0 Y0")
     except Exception as e:
         print(f"⚠️ Erro ao pausar: {e}")
     
-    return jsonify({'success': True, 'message': 'Impressão pausada - filamento retraído e cabeça movida para X0 Y0'})
+    return jsonify({'success': True, 'message': 'Impressão pausada - cabeça movida para X0 Y0'})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
@@ -1139,19 +1137,10 @@ def printer_resume():
             return jsonify({'success': False, 'message': '❌ Filamento ainda não detectado! Verifique a carga.'}), 400
         print("✓ Filamento detectado! Retomando impressão...")
     
-    # Desretrair filamento (compensar a retração feita na pausa) e restaurar modo absoluto
-    try:
-        send_gcode('M83')  # Modo relativo para extrusor
-        send_gcode('G1 E5 F3000')  # Desretrair 5mm de filamento
-        send_gcode('M82')  # Voltar ao modo absoluto para extrusor
-        send_gcode('G90')  # Garantir modo absoluto para XYZ
-        print("▶️ Filamento desretraído - Impressão retomada")
-    except Exception as e:
-        print(f"⚠️ Erro ao retomar: {e}")
-    
     print_paused = False
     print_paused_by_filament = False
-    return jsonify({'success': True, 'message': 'Impressão retomada com filamento desretraído'})
+    print("▶️ Impressão retomada")
+    return jsonify({'success': True, 'message': 'Impressão retomada'})
 
 @app.route('/api/printer/connect', methods=['POST'])
 def printer_connect():
@@ -1552,13 +1541,11 @@ def print_file(file_id):
                         print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
                         print("   Recarregue o filamento e clique em CONTINUAR para retomar.")
                         
-                        # Pausar com retração para evitar gotejamento
+                        # Apenas mover cabeça (sem retração)
                         try:
-                            send_gcode('M83')  # Modo relativo para extrusor
-                            send_gcode('G1 E-5 F3000')  # Retrair 5mm
-                            send_gcode('G90')  # Modo absoluto para XYZ
+                            send_gcode('G90')  # Modo absoluto
                             send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
-                            print("   Filamento retraído e cabeça movida para X0 Y0")
+                            print("   Cabeça movida para X0 Y0")
                         except:
                             pass
                         
@@ -1567,15 +1554,6 @@ def print_file(file_id):
                             filament_check = check_filament_sensor()
                             if filament_check.get('has_filament') and not print_paused_by_filament:
                                 print("✓ Filamento recarregado e impressão retomada!")
-                                # Desretrair filamento
-                                try:
-                                    send_gcode('M83')  # Modo relativo para extrusor
-                                    send_gcode('G1 E5 F3000')  # Desretrair 5mm
-                                    send_gcode('M82')  # Voltar ao modo absoluto para extrusor
-                                    send_gcode('G90')  # Garantir modo absoluto para XYZ
-                                    print("   Filamento desretraído - continuando impressão")
-                                except:
-                                    pass
                                 break
                             time.sleep(1)
                         
