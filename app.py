@@ -1165,6 +1165,7 @@ def printer_resume():
             send_gcode('G90')  # Modo absoluto para XYZ
             # Restaurar contador do extrusor ANTES de mover
             if pause_position['e'] is not None:
+                send_gcode('M82')  # Força modo absoluto do extrusor
                 send_gcode(f"G92 E{pause_position['e']}")
             # Restaurar posição sem extrusão
             send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
@@ -1612,6 +1613,7 @@ def print_file(file_id):
                                         send_gcode('G90')  # Modo absoluto XYZ
                                         # Restaurar contador do extrusor ANTES de mover
                                         if pause_position['e'] is not None:
+                                            send_gcode('M82')  # Força modo absoluto do extrusor
                                             send_gcode(f"G92 E{pause_position['e']}")
                                         send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
                                         print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
