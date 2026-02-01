@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/croma
-Environment="PATH=/home/pi/croma/venv/bin"
+Environment="PATH=/home/pi/croma/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/home/pi/croma/venv/bin/python app.py
 Restart=always
 RestartSec=10

@@ -10,6 +10,8 @@ from werkzeug.utils import secure_filename
 import re
 import base64
 import subprocess
+import shutil
+from typing import Optional
 
 # Importar GPIO (com fallback para desenvolvimento em outros sistemas)
 try:
@@ -42,7 +44,7 @@ def get_app_version() -> str:
         _APP_VERSION_CACHE = env_version.strip()
         return _APP_VERSION_CACHE
 
-    def _find_git_workdir(start_dir: str) -> str | None:
+    def _find_git_workdir(start_dir: str) -> Optional[str]:
         current = start_dir
         for _ in range(6):
             if os.path.exists(os.path.join(current, '.git')):
@@ -53,14 +55,37 @@ def get_app_version() -> str:
             current = parent
         return None
 
+    def _find_git_executable() -> str:
+        """Encontra o executável do git mesmo quando o PATH do systemd é restrito."""
+        env_git = os.environ.get('GIT_BIN')
+        candidates = [env_git] if env_git else []
+
+        which_git = shutil.which('git')
+        if which_git:
+            candidates.append(which_git)
+
+        candidates.extend([
+            '/usr/bin/git',
+            '/bin/git',
+            '/usr/local/bin/git',
+        ])
+
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+
+        return 'git'
+
     # Preferir identificar o repo do git automaticamente
     try:
         start_dir = os.path.dirname(os.path.abspath(__file__))
         git_dir = _find_git_workdir(start_dir) or start_dir
 
         # 1) Melhor formato: tag/describe
+        git_bin = _find_git_executable()
+
         result = subprocess.run(
-            ['git', '-C', git_dir, 'describe', '--tags', '--always', '--dirty'],
+            [git_bin, '-C', git_dir, 'describe', '--tags', '--always', '--dirty'],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -74,7 +99,7 @@ def get_app_version() -> str:
 
         # 2) Fallback: hash curto
         result = subprocess.run(
-            ['git', '-C', git_dir, 'rev-parse', '--short', 'HEAD'],
+            [git_bin, '-C', git_dir, 'rev-parse', '--short', 'HEAD'],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
