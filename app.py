@@ -42,20 +42,60 @@ def get_app_version() -> str:
         _APP_VERSION_CACHE = env_version.strip()
         return _APP_VERSION_CACHE
 
+    def _find_git_workdir(start_dir: str) -> str | None:
+        current = start_dir
+        for _ in range(6):
+            if os.path.exists(os.path.join(current, '.git')):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+        return None
+
+    # Preferir identificar o repo do git automaticamente
     try:
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        start_dir = os.path.dirname(os.path.abspath(__file__))
+        git_dir = _find_git_workdir(start_dir) or start_dir
+
+        # 1) Melhor formato: tag/describe
         result = subprocess.run(
-            ['git', 'describe', '--tags', '--always', '--dirty'],
-            cwd=repo_dir,
+            ['git', '-C', git_dir, 'describe', '--tags', '--always', '--dirty'],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            timeout=1,
+            timeout=2,
         )
         if result.returncode == 0:
             git_version = (result.stdout or '').strip()
             if git_version:
                 _APP_VERSION_CACHE = git_version
+                return _APP_VERSION_CACHE
+
+        # 2) Fallback: hash curto
+        result = subprocess.run(
+            ['git', '-C', git_dir, 'rev-parse', '--short', 'HEAD'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            git_hash = (result.stdout or '').strip()
+            if git_hash:
+                _APP_VERSION_CACHE = git_hash
+                return _APP_VERSION_CACHE
+    except Exception:
+        pass
+
+    # 3) Fallback: arquivo VERSION (se você quiser fixar manualmente)
+    try:
+        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'VERSION')
+        if os.path.exists(version_file):
+            with open(version_file, 'r', encoding='utf-8') as f:
+                v = f.read().strip()
+            if v:
+                _APP_VERSION_CACHE = v
                 return _APP_VERSION_CACHE
     except Exception:
         pass
