@@ -1108,43 +1108,15 @@ def printer_status():
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
-    global print_paused, print_paused_by_filament, pause_position
+    global print_paused, print_paused_by_filament
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
+    # Apenas pausar impressão - sem comandos adicionais
     print_paused = True
-    print_paused_by_filament = False  # Pausa manual, não por filamento
-    
-    # Salvar posição atual e mover para X0 Y0
-    try:
-        # Obter posição atual com M114
-        position_response = send_gcode('M114')
-        print(f"📍 Resposta M114: {position_response}")
-        
-        # Parsear resposta M114 (formato: "X:100.0 Y:50.0 Z:10.0 E:5.0")
-        if position_response:
-            import re
-            x_match = re.search(r'X:([0-9.-]+)', position_response)
-            y_match = re.search(r'Y:([0-9.-]+)', position_response)
-            z_match = re.search(r'Z:([0-9.-]+)', position_response)
-            e_match = re.search(r'E:([0-9.-]+)', position_response)
-            
-            if x_match and y_match and z_match:
-                pause_position['x'] = float(x_match.group(1))
-                pause_position['y'] = float(y_match.group(1))
-                pause_position['z'] = float(z_match.group(1))
-                if e_match:
-                    pause_position['e'] = float(e_match.group(1))
-                print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
-        
-        # Mover para X0 Y0
-        send_gcode('G90')  # Modo absoluto
-        send_gcode('G0 X0 Y0 F3000')  # Mover para origem (0, 0) rápido
-        print("⏸️ Impressão pausada - cabeça movida para X0 Y0")
-    except Exception as e:
-        print(f"⚠️ Erro ao pausar: {e}")
-    
-    return jsonify({'success': True, 'message': 'Impressão pausada - cabeça movida para X0 Y0'})
+    print_paused_by_filament = False
+    print("⏸️ Impressão pausada")
+    return jsonify({'success': True, 'message': 'Impressão pausada'})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
