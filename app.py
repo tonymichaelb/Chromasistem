@@ -41,7 +41,7 @@ print_paused = False
 print_stopped = False
 print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
-pause_position = {'x': None, 'y': None, 'z': None}  # Salvar posição antes da pausa
+pause_position = {'x': None, 'y': None, 'z': None, 'e': None}  # Salvar posição antes da pausa
 
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
@@ -1127,12 +1127,14 @@ def printer_pause():
             x_match = re.search(r'X:([0-9.-]+)', position_response)
             y_match = re.search(r'Y:([0-9.-]+)', position_response)
             z_match = re.search(r'Z:([0-9.-]+)', position_response)
+            e_match = re.search(r'E:([0-9.-]+)', position_response)
             
-            if x_match and y_match and z_match:
+            if x_match and y_match and z_match and e_match:
                 pause_position['x'] = float(x_match.group(1))
                 pause_position['y'] = float(y_match.group(1))
                 pause_position['z'] = float(z_match.group(1))
-                print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+                pause_position['e'] = float(e_match.group(1))
+                print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
         
         # Mover para X0 Y0
         send_gcode('G90')  # Modo absoluto
@@ -1159,10 +1161,14 @@ def printer_resume():
     # Restaurar posição salva antes de retomar
     if pause_position['x'] is not None:
         try:
-            send_gcode('G90')  # Modo absoluto
+            send_gcode('G90')  # Modo absoluto para XYZ
+            send_gcode('M82')  # Modo absoluto para extrusor
             # Restaurar posição sem extrusão
             send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
-            print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+            # Restaurar contador do extrusor para evitar retração
+            if pause_position['e'] is not None:
+                send_gcode(f"G92 E{pause_position['e']}")
+            print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
         except Exception as e:
             print(f"⚠️ Erro ao restaurar posição: {e}")
     
@@ -1582,12 +1588,14 @@ def print_file(file_id):
                                 x_match = re.search(r'X:([0-9.-]+)', position_response)
                                 y_match = re.search(r'Y:([0-9.-]+)', position_response)
                                 z_match = re.search(r'Z:([0-9.-]+)', position_response)
+                                e_match = re.search(r'E:([0-9.-]+)', position_response)
                                 
-                                if x_match and y_match and z_match:
+                                if x_match and y_match and z_match and e_match:
                                     pause_position['x'] = float(x_match.group(1))
                                     pause_position['y'] = float(y_match.group(1))
                                     pause_position['z'] = float(z_match.group(1))
-                                    print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+                                    pause_position['e'] = float(e_match.group(1))
+                                    print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
                             
                             send_gcode('G90')  # Modo absoluto
                             send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
@@ -1603,9 +1611,13 @@ def print_file(file_id):
                                 # Restaurar posição antes de continuar
                                 if pause_position['x'] is not None:
                                     try:
-                                        send_gcode('G90')
+                                        send_gcode('G90')  # Modo absoluto XYZ
+                                        send_gcode('M82')  # Modo absoluto extrusor
                                         send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
-                                        print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']}")
+                                        # Restaurar contador do extrusor
+                                        if pause_position['e'] is not None:
+                                            send_gcode(f"G92 E{pause_position['e']}")
+                                        print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
                                     except Exception as e:
                                         print(f"⚠️ Erro ao restaurar posição: {e}")
                                 break
