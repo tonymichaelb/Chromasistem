@@ -27,6 +27,47 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 CORS(app)
 
+# Versão do app (mostrada no rodapé)
+_APP_VERSION_CACHE = None
+
+
+def get_app_version() -> str:
+    """Retorna a versão do app (env var ou git), com cache."""
+    global _APP_VERSION_CACHE
+    if _APP_VERSION_CACHE is not None:
+        return _APP_VERSION_CACHE
+
+    env_version = os.environ.get('CHROMA_VERSION') or os.environ.get('APP_VERSION')
+    if env_version:
+        _APP_VERSION_CACHE = env_version.strip()
+        return _APP_VERSION_CACHE
+
+    try:
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        result = subprocess.run(
+            ['git', 'describe', '--tags', '--always', '--dirty'],
+            cwd=repo_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=1,
+        )
+        if result.returncode == 0:
+            git_version = (result.stdout or '').strip()
+            if git_version:
+                _APP_VERSION_CACHE = git_version
+                return _APP_VERSION_CACHE
+    except Exception:
+        pass
+
+    _APP_VERSION_CACHE = 'unknown'
+    return _APP_VERSION_CACHE
+
+
+@app.context_processor
+def inject_app_version():
+    return {'app_version': get_app_version()}
+
 # Lock para sincronizar acesso à porta serial
 serial_lock = threading.Lock()
 
@@ -42,6 +83,8 @@ print_stopped = False
 print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
 pause_position = {'x': None, 'y': None, 'z': None, 'e': None}  # Salvar posição antes da pausa
+g28_executed = False  # Pular G28 duplicado durante a impressão
+g29_executed = False  # Pular G29 duplicado durante a impressão
 
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
@@ -1451,11 +1494,13 @@ def print_file(file_id):
     import threading
     
     def print_gcode_file():
-        global print_paused, print_stopped
+        global print_paused, print_stopped, g28_executed, g29_executed
         try:
             # Resetar flags no início
             print_paused = False
             print_stopped = False
+            g28_executed = False
+            g29_executed = False
             
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
@@ -1474,18 +1519,16 @@ def print_file(file_id):
                 return
             
             # Aguardar um pouco para garantir estabilidade da conexão
-            time.sleep(1)
+            time.sleep(0.1)
             
             # Comandos de preparação (sem M110 que pode causar reset)
             print("  🛠️ Enviando comandos de inicialização...")
             if not send_gcode('G21', retries=3):  # Unidades em mm
                 print("✗ Falha no G21")
                 return
-            time.sleep(0.2)
             if not send_gcode('G90', retries=3):  # Modo absoluto
                 print("✗ Falha no G90")
                 return
-            time.sleep(0.2)
             # M82 removido - deixar G-code controlar modo do extrusor
             
             print("  Comandos de inicialização enviados")
@@ -1588,9 +1631,21 @@ def print_file(file_id):
                     
                     # Log para comandos importantes
                     cmd_upper = line.upper()
+                    
+                    # 🔧 PULAR G28/G29 duplicados (mantém a 1ª execução de cada)
                     if cmd_upper.startswith('G28'):
+                        if g28_executed:
+                            print("⏭️  Pulando G28 (já foi executado)")
+                            line_count += 1
+                            continue
+                        g28_executed = True
                         print("  🏠 Executando homing (G28)... pode levar até 60 segundos")
                     elif cmd_upper.startswith('G29'):
+                        if g29_executed:
+                            print("⏭️  Pulando G29 (já foi executado)")
+                            line_count += 1
+                            continue
+                        g29_executed = True
                         print("  📐 Executando nivelamento de mesa (G29)... pode levar até 2 minutos")
                     elif cmd_upper.startswith('M109'):
                         print("  🔥 Aquecendo bico e aguardando temperatura...")
@@ -1599,16 +1654,9 @@ def print_file(file_id):
                     elif cmd_upper.startswith('T'):
                         print(f"  🔧 Selecionando extrusora: {line}")
                     
-                    # Enviar comando com retry (todos esperam ok para não perder comandos)
+                    # Enviar comando com retry (aguarda resposta "ok" da impressora)
+                    # Nenhum delay extra - send_gcode() já escuta a resposta
                     response = send_gcode(line, retries=2)
-                    
-                    # Aguardar apenas após comandos críticos
-                    # G0/G1 não têm delay - impressora gerencia buffer
-                    if cmd_upper.startswith(('M109', 'M190')):
-                        time.sleep(2.0)  # Aquecimento completo
-                    elif cmd_upper.startswith(('G28', 'G29', 'T')):
-                        time.sleep(0.5)  # Comandos críticos
-                    # Sem delay para G0/G1 e outros - máxima velocidade
                     
                     if response is None:
                         print(f"⚠️ Comando falhou (linha {line_count}): {line} - CONTINUANDO impressão...")
