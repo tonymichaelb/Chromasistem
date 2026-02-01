@@ -1527,10 +1527,7 @@ def print_file(file_id):
                 print("✗ Falha no G90")
                 return
             time.sleep(0.2)
-            if not send_gcode('M82', retries=3):  # Extrusor absoluto
-                print("✗ Falha no M82")
-                return
-            time.sleep(1.0)
+            # M82 removido - deixar G-code controlar modo do extrusor
             
             print("  Comandos de inicialização enviados")
             
