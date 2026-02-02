@@ -147,6 +147,7 @@ print_paused = False
 print_stopped = False
 print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
+printing_in_progress = False
 g28_executed = False  # Pular G28 duplicado durante a impressão
 g29_executed = False  # Pular G29 duplicado durante a impressão
 
@@ -183,6 +184,7 @@ FILAMENT_SENSOR_PIN = 17  # GPIO17 (Pino físico 11)
 # - none: desabilitado
 FILAMENT_SENSOR_MODE = (os.environ.get('FILAMENT_SENSOR_MODE') or 'gpio').strip().lower()
 FILAMENT_CHECK_INTERVAL_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_SEC') or '2.0')
+FILAMENT_CHECK_INTERVAL_PRINT_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_PRINT_SEC') or '15.0')
 MARLIN_FILAMENT_INVERT = (os.environ.get('MARLIN_FILAMENT_INVERT') or '0').strip() in ('1', 'true', 'True', 'yes', 'YES')
 
 # Variável global para conexão serial
@@ -196,7 +198,8 @@ filament_status = {
     'last_check': None
 }
 
-_filament_last_check_ts = 0.0
+_filament_last_check_idle_ts = 0.0
+_filament_last_check_print_ts = 0.0
 
 
 def _extract_marlin_m119_candidates(m119_response: str):
@@ -336,15 +339,21 @@ def filament_sensor_callback(channel):
     else:
         print("✓ Filamento detectado (GPIO)")
 
-def check_filament_sensor():
+def check_filament_sensor(during_print: bool = False):
     """Verifica estado atual do sensor de filamento"""
     global filament_status
 
-    global _filament_last_check_ts
+    global _filament_last_check_idle_ts, _filament_last_check_print_ts
     now_ts = time.time()
-    if FILAMENT_CHECK_INTERVAL_SEC > 0 and (now_ts - _filament_last_check_ts) < FILAMENT_CHECK_INTERVAL_SEC:
+
+    interval = FILAMENT_CHECK_INTERVAL_PRINT_SEC if during_print else FILAMENT_CHECK_INTERVAL_SEC
+    last_ts = _filament_last_check_print_ts if during_print else _filament_last_check_idle_ts
+    if interval > 0 and (now_ts - last_ts) < interval:
         return filament_status
-    _filament_last_check_ts = now_ts
+    if during_print:
+        _filament_last_check_print_ts = now_ts
+    else:
+        _filament_last_check_idle_ts = now_ts
 
     if FILAMENT_SENSOR_MODE == 'none':
         filament_status['sensor_enabled'] = False
@@ -1684,7 +1693,8 @@ def print_file(file_id):
     import threading
     
     def print_gcode_file():
-        global print_paused, print_stopped, g28_executed, g29_executed
+        global print_paused, print_stopped, g28_executed, g29_executed, printing_in_progress
+        printing_in_progress = True
         try:
             # Resetar flags no início
             print_paused = False
@@ -1751,7 +1761,7 @@ def print_file(file_id):
                         break
                     
                     # ✅ VERIFICAR FILAMENTO - Pausar automaticamente se faltar
-                    filament_check = check_filament_sensor()
+                    filament_check = check_filament_sensor(during_print=True)
                     if not filament_check.get('has_filament'):
                         global print_paused_by_filament
                         print_paused_by_filament = True
@@ -1761,7 +1771,7 @@ def print_file(file_id):
                         
                         # Aguardar até que filamento volte E usuário clique continuar
                         while print_paused and not print_stopped:
-                            filament_check = check_filament_sensor()
+                            filament_check = check_filament_sensor(during_print=True)
                             if filament_check.get('has_filament') and not print_paused_by_filament:
                                 print("✓ Filamento recarregado e impressão retomada!")
                                 break
@@ -1894,6 +1904,8 @@ def print_file(file_id):
                 conn_local.close()
             except:
                 pass
+        finally:
+            printing_in_progress = False
     
     # Iniciar thread
     thread = threading.Thread(target=print_gcode_file, daemon=True)
@@ -2288,13 +2300,16 @@ def filament_debug_api():
     debug = {
         'mode': FILAMENT_SENSOR_MODE,
         'check_interval_sec': FILAMENT_CHECK_INTERVAL_SEC,
+        'check_interval_print_sec': FILAMENT_CHECK_INTERVAL_PRINT_SEC,
         'invert': MARLIN_FILAMENT_INVERT,
+        'printing_in_progress': printing_in_progress,
     }
 
     # Permitir forçar uma leitura nova (ignorar cache)
-    global _filament_last_check_ts
+    global _filament_last_check_idle_ts, _filament_last_check_print_ts
     if force:
-        _filament_last_check_ts = 0.0
+        _filament_last_check_idle_ts = 0.0
+        _filament_last_check_print_ts = 0.0
         debug['cache_bypassed'] = True
     else:
         debug['cache_bypassed'] = False
