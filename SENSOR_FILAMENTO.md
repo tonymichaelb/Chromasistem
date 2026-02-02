@@ -1,5 +1,10 @@
 # Sensor de Filamento - Configuração
 
+Este projeto suporta **dois modos** de leitura do sensor:
+
+1) **GPIO do Raspberry (modo `gpio`)**: sensor ligado direto no Raspberry.
+2) **Marlin (modo `marlin`)**: sensor ligado na **placa da impressora** e o sistema lê o estado via serial usando `M119`.
+
 ## Especificações
 
 - **GPIO**: GPIO17 (Pino físico 11)
@@ -69,6 +74,50 @@ O sistema usa interrupção GPIO (event detect) para resposta imediata:
 cd /home/pi/croma
 source venv/bin/activate
 pip install RPi.GPIO==0.7.1
+
+## Modo Marlin (sensor ligado na placa)
+
+Se você quer usar o **sensor da própria impressora** (Marlin), não precisa de GPIO no Raspberry.
+
+### 1) Ativar no Marlin
+
+- Conecte o sensor de filamento na entrada de **FIL_RUNOUT**/runout da sua placa.
+- No firmware Marlin, habilite o recurso de runout (nomes podem variar por versão/placa):
+  - `FILAMENT_RUNOUT_SENSOR`
+  - (opcional) `HOST_ACTION_COMMANDS` / `ADVANCED_PAUSE_FEATURE`
+
+### 2) Configurar o Chromasistem para ler via `M119`
+
+Defina a variável de ambiente:
+
+- `FILAMENT_SENSOR_MODE=marlin`
+
+Opcional:
+
+- `FILAMENT_CHECK_INTERVAL_SEC=2.0` (quanto tempo entre leituras; padrão 2s)
+- `MARLIN_FILAMENT_INVERT=1` (se o seu Marlin reportar invertido: `open` = sem filamento)
+
+No Raspberry (systemd), você pode adicionar no service:
+
+```ini
+Environment="FILAMENT_SENSOR_MODE=marlin"
+```
+
+Depois:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart croma
+```
+
+### 3) Como funciona a leitura
+
+O sistema envia `M119` e procura uma linha parecida com:
+
+- `filament: open` (normalmente = COM filamento)
+- `filament: TRIGGERED` (normalmente = SEM filamento)
+
+Quando detectar sem filamento, a impressão é pausada pelo próprio sistema (interrompe o envio do G-code) e você retoma ao clicar em **Continuar**.
 ```
 
 ### 2. Conectar Sensor Físico

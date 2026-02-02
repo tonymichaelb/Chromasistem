@@ -147,7 +147,6 @@ print_paused = False
 print_stopped = False
 print_paused_by_filament = False  # Flag para pausar por falta de filamento
 printing_thread = None
-pause_position = {'x': None, 'y': None, 'z': None, 'e': None}  # Salvar posição antes da pausa
 g28_executed = False  # Pular G28 duplicado durante a impressão
 g29_executed = False  # Pular G29 duplicado durante a impressão
 
@@ -178,22 +177,100 @@ SERIAL_TIMEOUT = 2
 # Configuração do sensor de filamento
 FILAMENT_SENSOR_PIN = 17  # GPIO17 (Pino físico 11)
 
+# Modo do sensor de filamento:
+# - gpio: lê GPIO do Raspberry
+# - marlin: lê status do Marlin via M119 (sensor ligado na placa da impressora)
+# - none: desabilitado
+FILAMENT_SENSOR_MODE = (os.environ.get('FILAMENT_SENSOR_MODE') or 'gpio').strip().lower()
+FILAMENT_CHECK_INTERVAL_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_SEC') or '2.0')
+MARLIN_FILAMENT_INVERT = (os.environ.get('MARLIN_FILAMENT_INVERT') or '0').strip() in ('1', 'true', 'True', 'yes', 'YES')
+
 # Variável global para conexão serial
 printer_serial = None
 
 # Variável global para estado do filamento
 filament_status = {
     'has_filament': True,
-    'sensor_enabled': True,  # Sempre habilitado (funciona no Raspberry com GPIO)
+    'sensor_enabled': True,
+    'source': 'gpio',
     'last_check': None
 }
+
+_filament_last_check_ts = 0.0
+
+
+def _parse_marlin_m119_for_filament(m119_response: str) -> Optional[bool]:
+    """Extrai o estado do filamento do M119.
+
+    Retorna:
+      - True  -> tem filamento
+      - False -> sem filamento
+      - None  -> não conseguiu detectar
+    """
+    if not m119_response:
+        return None
+
+    # Exemplos comuns (Marlin):
+    #   filament: open
+    #   filament: TRIGGERED
+    #   FIL_RUNOUT: open
+    #   filament_runout: TRIGGERED
+    candidates = []
+    for line in m119_response.split('\n'):
+        l = line.strip()
+        if not l or ':' not in l:
+            continue
+
+        key, value = l.split(':', 1)
+        key = key.strip().lower().replace(' ', '_')
+        value = value.strip().lower().replace(' ', '_')
+
+        if any(k in key for k in ('filament', 'runout', 'fil_runout')):
+            candidates.append((key, value))
+
+    if not candidates:
+        return None
+
+    # Usa o primeiro candidato encontrado
+    _, state = candidates[0]
+
+    # Normalização de estados
+    if state in ('open', 'not_triggered', 'nottriggered'):
+        has_filament = True
+    elif state in ('triggered', 'trig', 'closed'):
+        has_filament = False
+    else:
+        return None
+
+    if MARLIN_FILAMENT_INVERT:
+        has_filament = not has_filament
+
+    return has_filament
 
 # Configurar GPIO para sensor de filamento
 def setup_filament_sensor():
     """Inicializa o sensor de filamento"""
+    global filament_status
+
+    if FILAMENT_SENSOR_MODE == 'none':
+        filament_status['sensor_enabled'] = False
+        filament_status['source'] = 'none'
+        filament_status['has_filament'] = True
+        print("ℹ️ Sensor de filamento desabilitado (FILAMENT_SENSOR_MODE=none)")
+        return True
+
+    if FILAMENT_SENSOR_MODE == 'marlin':
+        filament_status['sensor_enabled'] = True
+        filament_status['source'] = 'marlin'
+        # Primeiro status será preenchido por check_filament_sensor()
+        print("✓ Sensor de filamento via Marlin (M119) habilitado")
+        return True
+
+    # default: gpio
+    filament_status['source'] = 'gpio'
     if not GPIO_AVAILABLE:
-        print("⚠️ GPIO não disponível - sensor de filamento simulado (sempre OK)")
-        filament_status['sensor_enabled'] = True  # Manter como True mesmo sem GPIO físico
+        print("⚠️ GPIO não disponível - modo gpio indisponível. Use FILAMENT_SENSOR_MODE=marlin para ler pela placa.")
+        filament_status['sensor_enabled'] = False
         filament_status['has_filament'] = True
         return True
     
@@ -234,20 +311,49 @@ def filament_sensor_callback(channel):
     
     filament_status['has_filament'] = has_filament
     filament_status['last_check'] = datetime.now().isoformat()
-    
+
     if not has_filament:
-        print("⚠️ ALERTA: Filamento acabou! Pausando impressão...")
-        # Pausar impressão automaticamente
-        send_gcode('M25')  # Pausar SD print
-        send_gcode('M117 Sem filamento!')  # Mensagem no display
+        print("⚠️ ALERTA: Filamento acabou (GPIO)")
     else:
-        print("✓ Filamento detectado")
+        print("✓ Filamento detectado (GPIO)")
 
 def check_filament_sensor():
     """Verifica estado atual do sensor de filamento"""
     global filament_status
+
+    global _filament_last_check_ts
+    now_ts = time.time()
+    if FILAMENT_CHECK_INTERVAL_SEC > 0 and (now_ts - _filament_last_check_ts) < FILAMENT_CHECK_INTERVAL_SEC:
+        return filament_status
+    _filament_last_check_ts = now_ts
+
+    if FILAMENT_SENSOR_MODE == 'none':
+        filament_status['sensor_enabled'] = False
+        filament_status['source'] = 'none'
+        filament_status['has_filament'] = True
+        filament_status['last_check'] = datetime.now().isoformat()
+        return filament_status
+
+    if FILAMENT_SENSOR_MODE == 'marlin':
+        filament_status['sensor_enabled'] = True
+        filament_status['source'] = 'marlin'
+        try:
+            # M119 pode responder rápido; mantém timeout curto
+            m119 = send_gcode('M119', wait_for_ok=True, timeout=5, retries=1)
+            parsed = _parse_marlin_m119_for_filament(m119 or '')
+            if parsed is not None:
+                filament_status['has_filament'] = parsed
+            filament_status['last_check'] = datetime.now().isoformat()
+        except Exception as e:
+            print(f"Erro ao ler filamento via Marlin (M119): {e}")
+            filament_status['last_check'] = datetime.now().isoformat()
+        return filament_status
     
     if not GPIO_AVAILABLE:
+        filament_status['sensor_enabled'] = False
+        filament_status['source'] = 'gpio'
+        filament_status['has_filament'] = True
+        filament_status['last_check'] = datetime.now().isoformat()
         return filament_status
     
     try:
@@ -1628,57 +1734,17 @@ def print_file(file_id):
                     # ✅ VERIFICAR FILAMENTO - Pausar automaticamente se faltar
                     filament_check = check_filament_sensor()
                     if not filament_check.get('has_filament'):
-                        global print_paused_by_filament, pause_position
+                        global print_paused_by_filament
                         print_paused_by_filament = True
                         print_paused = True
                         print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
                         print("   Recarregue o filamento e clique em CONTINUAR para retomar.")
-                        
-                        # Salvar posição atual e mover cabeça
-                        try:
-                            # Obter posição atual com M114
-                            position_response = send_gcode('M114')
-                            print(f"📍 Resposta M114: {position_response}")
-                            
-                            # Parsear resposta M114
-                            if position_response:
-                                import re
-                                x_match = re.search(r'X:([0-9.-]+)', position_response)
-                                y_match = re.search(r'Y:([0-9.-]+)', position_response)
-                                z_match = re.search(r'Z:([0-9.-]+)', position_response)
-                                e_match = re.search(r'E:([0-9.-]+)', position_response)
-                                
-                                if x_match and y_match and z_match:
-                                    pause_position['x'] = float(x_match.group(1))
-                                    pause_position['y'] = float(y_match.group(1))
-                                    pause_position['z'] = float(z_match.group(1))
-                                    if e_match:
-                                        pause_position['e'] = float(e_match.group(1))
-                                    print(f"💾 Posição salva: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
-                            
-                            send_gcode('G90')  # Modo absoluto
-                            send_gcode('G0 X0 Y0 F3000')  # Mover para X0 Y0
-                            print("   Cabeça movida para X0 Y0")
-                        except Exception as e:
-                            print(f"   ⚠️ Erro ao pausar: {e}")
                         
                         # Aguardar até que filamento volte E usuário clique continuar
                         while print_paused and not print_stopped:
                             filament_check = check_filament_sensor()
                             if filament_check.get('has_filament') and not print_paused_by_filament:
                                 print("✓ Filamento recarregado e impressão retomada!")
-                                # Restaurar posição antes de continuar
-                                if pause_position['x'] is not None:
-                                    try:
-                                        send_gcode('G90')  # Modo absoluto XYZ
-                                        # Restaurar contador do extrusor ANTES de mover
-                                        if pause_position['e'] is not None:
-                                            send_gcode('M82')  # Força modo absoluto do extrusor
-                                            send_gcode(f"G92 E{pause_position['e']}")
-                                        send_gcode(f"G0 X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} F3000")
-                                        print(f"🔄 Posição restaurada: X{pause_position['x']} Y{pause_position['y']} Z{pause_position['z']} E{pause_position['e']}")
-                                    except Exception as e:
-                                        print(f"⚠️ Erro ao restaurar posição: {e}")
                                 break
                             time.sleep(1)
                         
