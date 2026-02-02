@@ -175,14 +175,18 @@ SERIAL_PORT = '/dev/ttyACM0'  # Porta serial para placas Arduino/Marlin
 SERIAL_BAUDRATE = 115200
 SERIAL_TIMEOUT = 2
 
-# Configuração do sensor de filamento
-FILAMENT_SENSOR_PIN = 17  # GPIO17 (Pino físico 11)
+# Configuração do sensor de filamento (modo antigo: GPIO do Raspberry)
+FILAMENT_SENSOR_PIN = int(os.environ.get('FILAMENT_SENSOR_PIN') or '17')  # GPIO17 (Pino físico 11)
 
 # Modo do sensor de filamento:
 # - gpio: lê GPIO do Raspberry
 # - marlin: lê status do Marlin via M119 (sensor ligado na placa da impressora)
 # - none: desabilitado
-FILAMENT_SENSOR_MODE = (os.environ.get('FILAMENT_SENSOR_MODE') or 'gpio').strip().lower()
+_filament_mode_raw = (os.environ.get('FILAMENT_SENSOR_MODE') or 'gpio').strip().lower()
+# aliases para facilitar voltar ao "modo antigo" do Raspberry
+if _filament_mode_raw in ('old', 'raspberry', 'rpi', 'legacy'):
+    _filament_mode_raw = 'gpio'
+FILAMENT_SENSOR_MODE = _filament_mode_raw
 FILAMENT_CHECK_INTERVAL_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_SEC') or '2.0')
 FILAMENT_CHECK_INTERVAL_PRINT_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_PRINT_SEC') or '15.0')
 MARLIN_FILAMENT_INVERT = (os.environ.get('MARLIN_FILAMENT_INVERT') or '0').strip() in ('1', 'true', 'True', 'yes', 'YES')
@@ -445,6 +449,12 @@ def check_filament_sensor(during_print: bool = False):
         return filament_status
     
     try:
+        # Modo antigo (GPIO + callback): durante impressão, não precisa re-ler o pino.
+        # O callback já atualiza filament_status em tempo real e isso evita trabalho extra.
+        if during_print and filament_status.get('sensor_enabled'):
+            filament_status['last_check'] = datetime.now().isoformat()
+            return filament_status
+
         gpio_state = GPIO.input(FILAMENT_SENSOR_PIN)
         filament_status['has_filament'] = bool(gpio_state)
         filament_status['last_check'] = datetime.now().isoformat()
