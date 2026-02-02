@@ -186,6 +186,10 @@ FILAMENT_SENSOR_MODE = (os.environ.get('FILAMENT_SENSOR_MODE') or 'gpio').strip(
 FILAMENT_CHECK_INTERVAL_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_SEC') or '2.0')
 FILAMENT_CHECK_INTERVAL_PRINT_SEC = float(os.environ.get('FILAMENT_CHECK_INTERVAL_PRINT_SEC') or '15.0')
 MARLIN_FILAMENT_INVERT = (os.environ.get('MARLIN_FILAMENT_INVERT') or '0').strip() in ('1', 'true', 'True', 'yes', 'YES')
+FILAMENT_M119_DURING_PRINT = (os.environ.get('FILAMENT_M119_DURING_PRINT') or '0').strip() in ('1', 'true', 'True', 'yes', 'YES')
+
+# Evitar interferência no fluxo do G-code durante impressão (dashboard / status)
+TEMP_CHECK_INTERVAL_PRINT_SEC = float(os.environ.get('TEMP_CHECK_INTERVAL_PRINT_SEC') or '5.0')
 
 # Variável global para conexão serial
 printer_serial = None
@@ -200,6 +204,56 @@ filament_status = {
 
 _filament_last_check_idle_ts = 0.0
 _filament_last_check_print_ts = 0.0
+
+_temp_last_check_print_ts = 0.0
+_temp_cache_print = {
+    'bed': 0,
+    'nozzle': 0,
+    'target_bed': 0,
+    'target_nozzle': 0,
+}
+
+
+def _maybe_mark_filament_runout_from_printer_line(line: str) -> bool:
+    """Detecta mensagens de runout do Marlin no fluxo serial.
+
+    Observação: isso NÃO faz polling. Apenas reage a mensagens que o firmware já envia.
+    """
+    if not line:
+        return False
+
+    l = line.strip().lower()
+
+    # Padrões comuns de runout/pausa enviados por Marlin/hosts
+    runout_markers = (
+        'filament runout',
+        'filament_runout',
+        'out of filament',
+        'no filament',
+        'runout',
+        'action:pause',
+    )
+    if not any(m in l for m in runout_markers):
+        return False
+
+    # Reduz falsos positivos: "runout" pode aparecer em nomes, então exigimos contexto
+    if 'runout' in l and ('filament' not in l) and ('action:pause' not in l) and ('out of filament' not in l) and ('no filament' not in l):
+        return False
+
+    global filament_status, print_paused, print_paused_by_filament
+
+    filament_status['has_filament'] = False
+    filament_status['sensor_enabled'] = True
+    filament_status['source'] = 'marlin'
+    filament_status['last_check'] = datetime.now().isoformat()
+
+    # Só pausar se estivermos no meio de uma impressão
+    if printing_in_progress:
+        print_paused_by_filament = True
+        print_paused = True
+        print("🚨 Marlin sinalizou falta de filamento (runout). Impressão pausada.")
+
+    return True
 
 
 def _extract_marlin_m119_candidates(m119_response: str):
@@ -366,6 +420,12 @@ def check_filament_sensor(during_print: bool = False):
         filament_status['sensor_enabled'] = True
         filament_status['source'] = 'marlin'
         try:
+            # Durante impressão, evitar M119 (ele compete com o streaming do G-code e causa paradas visíveis)
+            # Exceção: se estiver pausado, a leitura não atrapalha o acabamento.
+            if during_print and printing_in_progress and (not print_paused) and (not FILAMENT_M119_DURING_PRINT):
+                filament_status['last_check'] = datetime.now().isoformat()
+                return filament_status
+
             # M119 pode responder rápido; mantém timeout curto
             m119 = send_gcode('M119', wait_for_ok=True, timeout=5, retries=1)
             parsed = _parse_marlin_m119_for_filament(m119 or '')
@@ -625,6 +685,12 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     if printer_serial.in_waiting > 0:
                         line = printer_serial.readline().decode('utf-8', errors='ignore').strip()
                         if line:
+                            # Detectar mensagens assíncronas relevantes (ex: runout) sem polling.
+                            try:
+                                _maybe_mark_filament_runout_from_printer_line(line)
+                            except Exception:
+                                pass
+
                             responses.append(line)
                             # Se recebeu 'ok', terminou
                             if 'ok' in line.lower():
@@ -1216,12 +1282,18 @@ def printer_status():
         started_at = current_job[2] if current_job else None
         print_time_str = current_job[3] if len(current_job) > 3 else None
         
-        # Consultar temperatura via M105 (não interfere com impressão)
-        temp_response = send_gcode('M105')
-        bed_temp = 0
-        nozzle_temp = 0
-        target_bed = 0
-        target_nozzle = 0
+        # Consultar temperatura via M105, mas com cache para não interferir no streaming do G-code
+        global _temp_last_check_print_ts, _temp_cache_print
+        now_ts = time.time()
+        bed_temp = _temp_cache_print['bed']
+        nozzle_temp = _temp_cache_print['nozzle']
+        target_bed = _temp_cache_print['target_bed']
+        target_nozzle = _temp_cache_print['target_nozzle']
+
+        temp_response = None
+        if TEMP_CHECK_INTERVAL_PRINT_SEC <= 0 or (now_ts - _temp_last_check_print_ts) >= TEMP_CHECK_INTERVAL_PRINT_SEC:
+            _temp_last_check_print_ts = now_ts
+            temp_response = send_gcode('M105')
         
         if temp_response and 'T:' in temp_response:
             try:
@@ -1238,8 +1310,14 @@ def printer_status():
                         break
             except Exception as e:
                 print(f"⚠️ Erro ao parsear temperatura: {e}")
-        else:
-            print(f"⚠️ Resposta M105 vazia ou sem 'T:': {temp_response}")
+
+        # Atualizar cache mesmo se não houve leitura (para manter consistência)
+        _temp_cache_print = {
+            'bed': bed_temp,
+            'nozzle': nozzle_temp,
+            'target_bed': target_bed,
+            'target_nozzle': target_nozzle,
+        }
         
         # Calcular tempo decorrido
         time_elapsed = '00:00:00'
@@ -1323,7 +1401,7 @@ def printer_status():
             'filename': current_filename,
             'time_elapsed': time_elapsed,
             'time_remaining': time_remaining,
-            'filament': check_filament_sensor()
+            'filament': check_filament_sensor(during_print=True)
         }
         return jsonify({'success': True, 'status': status})
     
@@ -2283,7 +2361,7 @@ def filament_status_api():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    status = check_filament_sensor()
+    status = check_filament_sensor(during_print=printing_in_progress)
     return jsonify({
         'success': True,
         'filament': status
@@ -2301,6 +2379,7 @@ def filament_debug_api():
         'mode': FILAMENT_SENSOR_MODE,
         'check_interval_sec': FILAMENT_CHECK_INTERVAL_SEC,
         'check_interval_print_sec': FILAMENT_CHECK_INTERVAL_PRINT_SEC,
+        'm119_during_print': FILAMENT_M119_DURING_PRINT,
         'invert': MARLIN_FILAMENT_INVERT,
         'printing_in_progress': printing_in_progress,
     }
