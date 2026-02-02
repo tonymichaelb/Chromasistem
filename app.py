@@ -199,53 +199,72 @@ filament_status = {
 _filament_last_check_ts = 0.0
 
 
-def _parse_marlin_m119_for_filament(m119_response: str) -> Optional[bool]:
-    """Extrai o estado do filamento do M119.
-
-    Retorna:
-      - True  -> tem filamento
-      - False -> sem filamento
-      - None  -> não conseguiu detectar
-    """
-    if not m119_response:
-        return None
-
-    # Exemplos comuns (Marlin):
-    #   filament: open
-    #   filament: TRIGGERED
-    #   FIL_RUNOUT: open
-    #   filament_runout: TRIGGERED
+def _extract_marlin_m119_candidates(m119_response: str):
+    """Retorna candidatos detectados no M119 relacionados a filamento/runout."""
     candidates = []
+    if not m119_response:
+        return candidates
+
     for line in m119_response.split('\n'):
         l = line.strip()
         if not l or ':' not in l:
             continue
 
         key, value = l.split(':', 1)
-        key = key.strip().lower().replace(' ', '_')
-        value = value.strip().lower().replace(' ', '_')
+        key_norm = key.strip().lower().replace(' ', '_')
+        value_norm = value.strip().lower().replace(' ', '_')
 
-        if any(k in key for k in ('filament', 'runout', 'fil_runout')):
-            candidates.append((key, value))
+        if any(k in key_norm for k in ('filament', 'runout', 'fil_runout', 'fil_runout', 'filament_runout')):
+            candidates.append({'key': key_norm, 'value': value_norm, 'raw': l})
 
+    return candidates
+
+
+def _m119_value_to_has_filament(value_norm: str) -> Optional[bool]:
+    # Normalização de estados típicos do Marlin
+    if not value_norm:
+        return None
+
+    # Alguns firmwares mandam múltiplas palavras
+    if 'not_triggered' in value_norm or 'nottriggered' in value_norm:
+        return True
+    if 'triggered' in value_norm:
+        return False
+
+    if value_norm in ('open',):
+        return True
+    if value_norm in ('closed',):
+        return False
+
+    return None
+
+
+def _parse_marlin_m119_for_filament(m119_response: str) -> Optional[bool]:
+    """Extrai o estado do filamento do M119 (sensor ligado na placa / Marlin)."""
+    candidates = _extract_marlin_m119_candidates(m119_response)
     if not candidates:
         return None
 
-    # Usa o primeiro candidato encontrado
-    _, state = candidates[0]
+    # Preferir chaves mais específicas primeiro
+    def score(c):
+        key = c['key']
+        if 'filament_runout' in key or 'fil_runout' in key or 'runout' in key:
+            return 3
+        if 'filament' in key:
+            return 2
+        return 1
 
-    # Normalização de estados
-    if state in ('open', 'not_triggered', 'nottriggered'):
-        has_filament = True
-    elif state in ('triggered', 'trig', 'closed'):
-        has_filament = False
-    else:
-        return None
+    candidates.sort(key=score, reverse=True)
 
-    if MARLIN_FILAMENT_INVERT:
-        has_filament = not has_filament
+    for c in candidates:
+        has_filament = _m119_value_to_has_filament(c['value'])
+        if has_filament is None:
+            continue
+        if MARLIN_FILAMENT_INVERT:
+            has_filament = not has_filament
+        return has_filament
 
-    return has_filament
+    return None
 
 # Configurar GPIO para sensor de filamento
 def setup_filament_sensor():
@@ -2257,6 +2276,46 @@ def filament_status_api():
         'success': True,
         'filament': status
     })
+
+
+@app.route('/api/filament/debug', methods=['GET'])
+def filament_debug_api():
+    """Diagnóstico do sensor de filamento (especialmente para modo Marlin/M119)."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    force = request.args.get('force', '').strip() in ('1', 'true', 'True', 'yes', 'YES')
+    debug = {
+        'mode': FILAMENT_SENSOR_MODE,
+        'check_interval_sec': FILAMENT_CHECK_INTERVAL_SEC,
+        'invert': MARLIN_FILAMENT_INVERT,
+    }
+
+    # Permitir forçar uma leitura nova (ignorar cache)
+    global _filament_last_check_ts
+    if force:
+        _filament_last_check_ts = 0.0
+        debug['cache_bypassed'] = True
+    else:
+        debug['cache_bypassed'] = False
+
+    # Status atual (já passa pela lógica do modo)
+    status = check_filament_sensor()
+    debug['status'] = status
+
+    # Se for Marlin, coletar M119 bruto + parse detalhado
+    if FILAMENT_SENSOR_MODE == 'marlin':
+        try:
+            raw_m119 = send_gcode('M119', wait_for_ok=True, timeout=5, retries=1)
+        except Exception as e:
+            raw_m119 = None
+            debug['m119_error'] = str(e)
+
+        debug['m119_raw'] = raw_m119
+        debug['m119_candidates'] = _extract_marlin_m119_candidates(raw_m119 or '')
+        debug['m119_parsed_has_filament'] = _parse_marlin_m119_for_filament(raw_m119 or '')
+
+    return jsonify({'success': True, 'debug': debug})
 
 if __name__ == '__main__':
     init_db()
