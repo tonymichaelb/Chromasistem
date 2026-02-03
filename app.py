@@ -206,6 +206,9 @@ filament_status = {
     'last_check': None
 }
 
+gpio_live_updates_active = False  # True quando callback ou polling mantém status atualizado
+_gpio_poll_thread_started = False
+
 _filament_last_check_idle_ts = 0.0
 _filament_last_check_print_ts = 0.0
 
@@ -331,6 +334,7 @@ def _parse_marlin_m119_for_filament(m119_response: str) -> Optional[bool]:
 def setup_filament_sensor():
     """Inicializa o sensor de filamento"""
     global filament_status
+    global gpio_live_updates_active, _gpio_poll_thread_started
 
     if FILAMENT_SENSOR_MODE == 'none':
         filament_status['sensor_enabled'] = False
@@ -364,18 +368,62 @@ def setup_filament_sensor():
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(FILAMENT_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         
-        # Configurar callback para detecção de mudança
-        GPIO.add_event_detect(FILAMENT_SENSOR_PIN, GPIO.BOTH, 
-                            callback=filament_sensor_callback, 
-                            bouncetime=300)
+        gpio_live_updates_active = False
+
+        # Configurar callback para detecção de mudança (modo antigo)
+        try:
+            GPIO.add_event_detect(
+                FILAMENT_SENSOR_PIN,
+                GPIO.BOTH,
+                callback=filament_sensor_callback,
+                bouncetime=300,
+            )
+            gpio_live_updates_active = True
+        except Exception as e:
+            # Em alguns sistemas/combinações de kernel, edge detection pode falhar.
+            # Fallback: polling leve em thread para manter o status atualizado.
+            print(f"⚠️ Falha ao ativar detecção por borda (GPIO.add_event_detect): {e}")
+
+            if not _gpio_poll_thread_started:
+                _gpio_poll_thread_started = True
+
+                import threading
+
+                def _gpio_filament_poll_loop():
+                    global filament_status, gpio_live_updates_active
+                    gpio_live_updates_active = True
+                    last_value = None
+                    while True:
+                        try:
+                            gpio_state = GPIO.input(FILAMENT_SENSOR_PIN)
+                            has_filament = bool(gpio_state)
+
+                            if last_value is None or has_filament != last_value:
+                                filament_status['has_filament'] = has_filament
+                                filament_status['last_check'] = datetime.now().isoformat()
+                                if not has_filament:
+                                    print("⚠️ ALERTA: Filamento acabou (GPIO/poll)")
+                                else:
+                                    print("✓ Filamento detectado (GPIO/poll)")
+                                last_value = has_filament
+                            else:
+                                filament_status['last_check'] = datetime.now().isoformat()
+
+                        except Exception:
+                            # Se algo der errado, não derruba o servidor
+                            pass
+
+                        time.sleep(0.2)
+
+                threading.Thread(target=_gpio_filament_poll_loop, daemon=True).start()
         
         filament_status['sensor_enabled'] = True
         print(f"✓ Sensor de filamento configurado no GPIO{FILAMENT_SENSOR_PIN}")
         return True
     except Exception as e:
         print(f"⚠️ Erro ao configurar sensor de filamento: {e}")
-        print("   Usando modo simulado (sensor_enabled = True, sempre OK)")
-        filament_status['sensor_enabled'] = True  # Manter como True mesmo com erro
+        print("   Sensor de filamento ficará desabilitado até corrigir o GPIO")
+        filament_status['sensor_enabled'] = False
         filament_status['has_filament'] = True
         return True
 
@@ -451,7 +499,7 @@ def check_filament_sensor(during_print: bool = False):
     try:
         # Modo antigo (GPIO + callback): durante impressão, não precisa re-ler o pino.
         # O callback já atualiza filament_status em tempo real e isso evita trabalho extra.
-        if during_print and filament_status.get('sensor_enabled'):
+        if during_print and filament_status.get('sensor_enabled') and gpio_live_updates_active:
             filament_status['last_check'] = datetime.now().isoformat()
             return filament_status
 
