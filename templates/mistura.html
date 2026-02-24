@@ -177,6 +177,44 @@
             color: #333;
             word-break: break-all;
         }
+
+        .suggest-color-box {
+            background: #e8f4fc;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .suggest-color-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .suggest-color-swatch {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #0066cc;
+            cursor: pointer;
+        }
+        .suggest-color-swatch input[type="color"] {
+            width: 100%;
+            height: 100%;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+        }
+        .suggest-color-hint {
+            flex: 1;
+            min-width: 200px;
+            font-size: 13px;
+            color: #555;
+        }
     </style>
 </head>
 <body class="dashboard-page">
@@ -208,6 +246,17 @@
         <div class="info-box">
             <strong>ℹ️ Comando:</strong> M182 A[%] B[%] C[%]<br>
             Filamento A (Extrusora 1) • Filamento B (Extrusora 2) • Filamento C (Extrusora 3)
+        </div>
+
+        <!-- Sugerir mistura a partir de uma cor (100+ cores) -->
+        <div class="suggest-color-box">
+            <strong>🌈 Sugerir mistura a partir de uma cor:</strong>
+            <div class="suggest-color-row">
+                <div class="suggest-color-swatch">
+                    <input type="color" id="suggestColorPicker" value="#808080" title="Escolher cor para sugerir A/B/C">
+                </div>
+                <span class="suggest-color-hint">Escolha uma cor para preencher os percentuais automaticamente. Tons mais escuros tendem a uma mistura mais neutra; tons mais claros, ao matiz da cor. Ajuste os sliders se quiser e envie.</span>
+            </div>
         </div>
 
         <div class="filament-controls">
@@ -276,6 +325,52 @@
         const commandPreview = document.getElementById('commandPreview');
         const sendBtn = document.getElementById('sendBtn');
         const statusMessage = document.getElementById('statusMessage');
+
+        // Sugerir A/B/C a partir de uma cor (RGB → CMY %, soma 100).
+        // Usa matiz + luminosidade: tons escuros misturam com neutro (33/33/34), tons claros ficam mais saturados.
+        function hexToRgb(hex) {
+            const n = parseInt(hex.slice(1), 16);
+            return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+        }
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            const d = max - min;
+            const v = max;
+            const s = max === 0 ? 0 : d / max;
+            let h = 0;
+            if (d !== 0) {
+                if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+                else if (max === g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+                h /= 6;
+            }
+            return { h: h, s: s, v: v };
+        }
+        function rgbToCmyPercent(r, g, b) {
+            const R = r / 255, G = g / 255, B = b / 255;
+            let c = (G + B - R) / 2, m = (R + B - G) / 2, y = (R + G - B) / 2;
+            c = Math.max(0, Math.min(1, c));
+            m = Math.max(0, Math.min(1, m));
+            y = Math.max(0, Math.min(1, y));
+            let total = c + m + y;
+            if (total <= 0) return { a: 33, b: 33, c: 34 };
+            const scale = 100 / total;
+            let aPct = c * scale, bPct = m * scale, cPct = y * scale;
+            // Incorporar luminosidade: cor escura → mais neutro (33/33/34), cor clara → mistura do matiz
+            const hsv = rgbToHsv(r, g, b);
+            const neutral = { a: 33, b: 33, c: 34 };
+            const hueMix = { a: aPct, b: bPct, c: cPct };
+            const V = hsv.v;
+            const blendA = V * hueMix.a + (1 - V) * neutral.a;
+            const blendB = V * hueMix.b + (1 - V) * neutral.b;
+            const blendC = V * hueMix.c + (1 - V) * neutral.c;
+            const sumBlend = blendA + blendB + blendC;
+            const scaleBlend = sumBlend > 0 ? 100 / sumBlend : 1;
+            let aPctFinal = Math.round(blendA * scaleBlend), bPctFinal = Math.round(blendB * scaleBlend), cPctFinal = Math.round(blendC * scaleBlend);
+            if (aPctFinal + bPctFinal + cPctFinal !== 100) cPctFinal += (100 - aPctFinal - bPctFinal - cPctFinal);
+            return { a: aPctFinal, b: bPctFinal, c: Math.max(0, cPctFinal) };
+        }
 
         function updateDisplay() {
             const a = parseInt(sliderA.value);
@@ -347,6 +442,18 @@
         sliderA.addEventListener('input', () => distributePercentages(sliderA));
         sliderB.addEventListener('input', () => distributePercentages(sliderB));
         sliderC.addEventListener('input', () => distributePercentages(sliderC));
+
+        const suggestColorPicker = document.getElementById('suggestColorPicker');
+        if (suggestColorPicker) {
+            suggestColorPicker.addEventListener('input', function() {
+                const rgb = hexToRgb(this.value);
+                const mix = rgbToCmyPercent(rgb.r, rgb.g, rgb.b);
+                sliderA.value = mix.a;
+                sliderB.value = mix.b;
+                sliderC.value = mix.c;
+                updateDisplay();
+            });
+        }
 
         sendBtn.addEventListener('click', sendMixture);
         document.getElementById('logoutBtn').addEventListener('click', logout);

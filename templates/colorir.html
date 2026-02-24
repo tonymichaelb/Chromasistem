@@ -486,6 +486,69 @@
             font-size: 14px;
             color: #856404;
         }
+
+        /* Cor personalizada (100+) */
+        .custom-color-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 15px;
+        }
+        .custom-color-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            align-items: flex-start;
+        }
+        .custom-color-picker-wrap {
+            flex-shrink: 0;
+        }
+        .custom-color-label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        .custom-color-swatch {
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            border: 3px solid var(--border-color);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .custom-color-input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+            border: none;
+        }
+        .custom-color-info {
+            flex: 1;
+            min-width: 200px;
+        }
+        .custom-color-preview {
+            width: 100%;
+            height: 50px;
+            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            margin-bottom: 12px;
+        }
+        .custom-color-percents {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+            line-height: 1.8;
+        }
+        .custom-color-percents span { font-weight: 600; color: var(--text-primary); }
     </style>
 </head>
 <body class="dashboard-page">
@@ -500,6 +563,7 @@
                 <a href="{{ url_for('files') }}" class="nav-link">Arquivos</a>
                 <a href="{{ url_for('terminal') }}" class="nav-link">Terminal</a>
                 <a href="{{ url_for('colorir') }}" class="nav-link active">Colorir</a>
+                <a href="{{ url_for('mistura') }}" class="nav-link">Mistura</a>
                 <a href="{{ url_for('wifi_page') }}" class="nav-link">Wi-Fi</a>
             </div>
             <div class="nav-user">
@@ -523,6 +587,29 @@
 
         <h2 style="margin-top: 40px;">Tintas Disponíveis (1 a 19)</h2>
         <div class="color-samples" id="colorSamples"></div>
+
+        <!-- Cor personalizada: qualquer cor = 100+ cores (mesmos 3 filamentos) -->
+        <h2 style="margin-top: 40px;">🌈 Cor personalizada — qualquer cor (100+)</h2>
+        <p style="margin-bottom: 15px; color: var(--text-secondary); font-size: 14px;">Escolha qualquer cor. O sistema calcula a mistura Ciano/Magenta/Amarelo e aplica ao pincel selecionado.</p>
+        <div class="custom-color-box">
+            <div class="custom-color-row">
+                <div class="custom-color-picker-wrap">
+                    <label class="custom-color-label">Clique para escolher a cor:</label>
+                    <div class="custom-color-swatch" id="customColorSwatch" title="Clique para abrir o seletor">
+                        <input type="color" id="mainColorPicker" value="#808080" class="custom-color-input" title="Escolher cor">
+                    </div>
+                </div>
+                <div class="custom-color-info">
+                    <div class="custom-color-preview" id="customColorPreview"></div>
+                    <div class="custom-color-percents">
+                        <span id="customPercentA">Ciano: 33%</span><br>
+                        <span id="customPercentB">Magenta: 33%</span><br>
+                        <span id="customPercentC">Amarelo: 34%</span>
+                    </div>
+                    <button type="button" class="modal-btn btn-save" id="applyCustomColorBtn">Aplicar ao pincel atual</button>
+                </div>
+            </div>
+        </div>
 
     </div>
 
@@ -550,6 +637,7 @@
                             <li>Escolher uma cor RGB personalizada clicando na bolinha colorida</li>
                         </ul>
                     </li>
+                    <li><strong>Cor personalizada (100+ cores):</strong> Na seção "Cor personalizada" abaixo das tintas, escolha qualquer cor no seletor. O sistema calcula a mistura Ciano/Magenta/Amarelo e você pode aplicar ao pincel atual com um clique.</li>
                 </ol>
                 
                 <div class="help-tip">
@@ -889,27 +977,15 @@
         }
 
         function updateColorPreview(cyanPercent, magentaPercent, yellowPercent) {
-            // Normalizar porcentagens
             const total = cyanPercent + magentaPercent + yellowPercent;
             const cyan = total > 0 ? cyanPercent / total : 0;
             const magenta = total > 0 ? magentaPercent / total : 0;
             const yellow = total > 0 ? yellowPercent / total : 0;
-            
-            // Cores base em RGB
-            // Ciano = (0, 255, 255)
-            // Magenta = (255, 0, 255)
-            // Amarelo = (255, 255, 0)
-            
-            // Mistura ponderada
-            const r = Math.round(255 * magenta + 255 * yellow);
-            const g = Math.round(255 * cyan + 255 * yellow);
-            const b = Math.round(255 * cyan + 255 * magenta);
-            
-            // Aplicar à bolinha
-            const colorPreview = document.getElementById('colorPreview');
-            if (colorPreview) {
-                colorPreview.style.background = `rgb(${r}, ${g}, ${b})`;
-            }
+            const r = Math.min(255, Math.round(255 * (magenta + yellow)));
+            const g = Math.min(255, Math.round(255 * (cyan + yellow)));
+            const bVal = Math.min(255, Math.round(255 * (cyan + magenta)));
+            const el = document.getElementById('colorPreview');
+            if (el) el.style.background = `rgb(${r}, ${g}, ${bVal})`;
         }
 
         function distributeModalPercentages(changedSlider) {
@@ -1076,6 +1152,102 @@
             }, 4000);
         }
 
+        // ---------- Cor personalizada (100+ cores) ----------
+        // Converte hex (#RRGGBB) para {r,g,b} 0-255
+        function hexToRgb(hex) {
+            const n = parseInt(hex.slice(1), 16);
+            return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+        }
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            const d = max - min;
+            const v = max;
+            const s = max === 0 ? 0 : d / max;
+            let h = 0;
+            if (d !== 0) {
+                if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+                else if (max === g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+                h /= 6;
+            }
+            return { h: h, s: s, v: v };
+        }
+        // Converte RGB para porcentagens CMY que somam 100%. Luminosidade: tons escuros → mais neutro (33/33/34), claros → matiz.
+        function rgbToCmyPercent(r, g, b) {
+            const R = r / 255, G = g / 255, B = b / 255;
+            let c = (G + B - R) / 2, m = (R + B - G) / 2, y = (R + G - B) / 2;
+            c = Math.max(0, Math.min(1, c));
+            m = Math.max(0, Math.min(1, m));
+            y = Math.max(0, Math.min(1, y));
+            let total = c + m + y;
+            if (total <= 0) return { a: 33, b: 33, c: 34 };
+            const scale = 100 / total;
+            let aPct = c * scale, bPct = m * scale, cPct = y * scale;
+            const hsv = rgbToHsv(r, g, b);
+            const neutral = { a: 33, b: 33, c: 34 };
+            const hueMix = { a: aPct, b: bPct, c: cPct };
+            const V = hsv.v;
+            const blendA = V * hueMix.a + (1 - V) * neutral.a;
+            const blendB = V * hueMix.b + (1 - V) * neutral.b;
+            const blendC = V * hueMix.c + (1 - V) * neutral.c;
+            const sumBlend = blendA + blendB + blendC;
+            const scaleBlend = sumBlend > 0 ? 100 / sumBlend : 1;
+            let aPctFinal = Math.round(blendA * scaleBlend), bPctFinal = Math.round(blendB * scaleBlend), cPctFinal = Math.round(blendC * scaleBlend);
+            if (aPctFinal + bPctFinal + cPctFinal !== 100) cPctFinal += (100 - aPctFinal - bPctFinal - cPctFinal);
+            return { a: aPctFinal, b: bPctFinal, c: Math.max(0, cPctFinal) };
+        }
+
+        function updateCustomColorSection(hex) {
+            const swatch = document.getElementById('customColorSwatch');
+            const preview = document.getElementById('customColorPreview');
+            const picker = document.getElementById('mainColorPicker');
+            if (picker && picker.value !== hex) picker.value = hex;
+            if (swatch) swatch.style.background = hex;
+            if (preview) preview.style.background = hex;
+            const rgb = hexToRgb(hex);
+            const mix = rgbToCmyPercent(rgb.r, rgb.g, rgb.b);
+            document.getElementById('customPercentA').textContent = 'Ciano (A): ' + mix.a + '%';
+            document.getElementById('customPercentB').textContent = 'Magenta (B): ' + mix.b + '%';
+            document.getElementById('customPercentC').textContent = 'Amarelo (C): ' + mix.c + '%';
+            return mix;
+        }
+
+        function applyCustomColorToBrush() {
+            if (currentBrushIndex === null) {
+                showMessage('❌ Primeiro escolha um pincel acima.', 'error');
+                return;
+            }
+            const picker = document.getElementById('mainColorPicker');
+            const hex = picker ? picker.value : '#808080';
+            const mix = updateCustomColorSection(hex);
+
+            brushCustomColors[currentBrushIndex] = hex;
+            brushMixtures[currentBrushIndex] = mix;
+            localStorage.setItem('brushCustomColors', JSON.stringify(brushCustomColors));
+            localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
+
+            renderBrushes();
+            updateUI();
+            sendMixtureForBrush(currentBrushIndex, mix);
+            fetch('/api/printer/save-brush-mixtures', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mixtures: brushMixtures,
+                    colors: brushCustomColors,
+                    tintaColors: tintaCustomColors
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) console.log('✓ Cor personalizada sincronizada');
+            })
+            .catch(err => console.error('Erro ao sincronizar:', err));
+
+            showMessage('✅ Cor personalizada aplicada ao Pincel ' + (currentBrushIndex + 1) + '!', 'success');
+        }
+
         // Carregar status inicial
         function loadCurrentBrush() {
             fetch('/api/printer/current-brush')
@@ -1097,25 +1269,24 @@
                     if (data.success && data.mixtures) {
                         brushMixtures = data.mixtures;
                         localStorage.setItem('brushMixtures', JSON.stringify(brushMixtures));
-                        
-                        // Carregar cores personalizadas dos pincéis
                         if (data.colors) {
                             brushCustomColors = data.colors;
                             localStorage.setItem('brushCustomColors', JSON.stringify(brushCustomColors));
                         }
-                        
-                        // Carregar cores personalizadas das tintas
                         if (data.tintaColors) {
                             tintaCustomColors = data.tintaColors;
                             localStorage.setItem('tintaCustomColors', JSON.stringify(tintaCustomColors));
                         }
-                        
                         console.log('✓ Misturas e cores carregadas do servidor');
-                        renderBrushes(); // Re-renderizar com as cores carregadas
-                        renderColorSamples();
                     }
+                    renderBrushes();
+                    renderColorSamples();
                 })
-                .catch(error => console.error('Erro ao carregar misturas:', error));
+                .catch(error => {
+                    console.error('Erro ao carregar misturas:', error);
+                    renderBrushes();
+                    renderColorSamples();
+                });
         }
 
         // Logout
@@ -1125,9 +1296,24 @@
             });
         });
 
-        // Inicializar
-        loadBrushMixtures();  // Carregar misturas e cores do servidor (já renderiza)
+        // Inicializar: sempre mostrar pincéis e tintas na carga; depois carregar dados do servidor
+        renderBrushes();
+        renderColorSamples();
+        loadBrushMixtures();
         loadCurrentBrush();
+
+        // Cor personalizada: ao mudar a cor, atualiza preview e % A/B/C
+        const mainColorPicker = document.getElementById('mainColorPicker');
+        const applyCustomColorBtn = document.getElementById('applyCustomColorBtn');
+        if (mainColorPicker) {
+            mainColorPicker.addEventListener('input', function() {
+                updateCustomColorSection(this.value);
+            });
+            updateCustomColorSection(mainColorPicker.value);
+        }
+        if (applyCustomColorBtn) {
+            applyCustomColorBtn.addEventListener('click', applyCustomColorToBrush);
+        }
 
         // ========== MODAL DE AJUDA ==========
         const helpIcon = document.getElementById('helpIcon');
