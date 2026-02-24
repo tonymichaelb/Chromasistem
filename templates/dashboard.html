@@ -127,6 +127,31 @@
                         ⏹️ Parar
                     </button>
                 </div>
+                <!-- Modal de opções ao pausar -->
+                <div id="pauseModal" class="modal" style="display: none;">
+                    <div class="modal-content" style="max-width: 400px;">
+                        <h3 style="margin-top: 0;">⏸️ Opções de pausa</h3>
+                        <p style="color: #666; font-size: 0.95em;">Escolha como a impressão deve pausar:</p>
+                        <div class="pause-options" style="display: flex; flex-direction: column; gap: 8px;">
+                            <label class="pause-option" style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="pauseOption" value="keep_temp" checked>
+                                <span><strong>Manter temperatura</strong> — Bico e mesa permanecem aquecidos (recomendado)</span>
+                            </label>
+                            <label class="pause-option" style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="pauseOption" value="cold">
+                                <span><strong>Pausa fria</strong> — Desliga aquecedores após pausar</span>
+                            </label>
+                            <label class="pause-option" style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="pauseOption" value="filament_change">
+                                <span><strong>Troca de filamento</strong> — Envia M600 (se a impressora suportar)</span>
+                            </label>
+                        </div>
+                        <div style="margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" id="pauseModalCancel" class="btn btn-secondary">Cancelar</button>
+                            <button type="button" id="pauseModalConfirm" class="btn btn-warning">Pausar</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <!-- Arquivos G-Code Recentes -->
@@ -158,7 +183,7 @@
                                 <span>🖨️ {{ file.print_count }}x</span>
                             </div>
                         </div>
-                        <button class="btn btn-success btn-xs" onclick="printFileFromDashboard({{ file.id }}, '{{ file.name }}')">▶️</button>
+                        <button type="button" class="btn btn-success btn-xs btn-print-file" data-file-id="{{ file.id }}" data-file-name="{{ file.name }}">▶️</button>
                     </div>
                     {% endfor %}
                 </div>
@@ -192,6 +217,19 @@
                                                status.state === 'paused' ? 'Pausado' : 
                                                status.state === 'idle' ? 'Ocioso' : 'Parado';
                     stateElement.className = 'status-value badge badge-' + status.state;
+                    
+                    // Habilitar/desabilitar botões conforme estado (visual: desabilitado = ação não se aplica)
+                    const pauseBtn = document.getElementById('pauseBtn');
+                    const resumeBtn = document.getElementById('resumeBtn');
+                    const stopBtn = document.getElementById('stopBtn');
+                    const canPause = (status.state === 'printing');
+                    const canResume = (status.state === 'paused');
+                    const canStop = (status.state === 'printing' || status.state === 'paused');
+                    pauseBtn.disabled = !canPause;
+                    resumeBtn.disabled = !canResume;
+                    stopBtn.disabled = !canStop;
+                    pauseBtn.title = canPause ? 'Pausar impressão em andamento' : 'Disponível apenas durante uma impressão';
+                    resumeBtn.title = canResume ? 'Retomar impressão pausada' : 'Disponível apenas quando a impressão estiver pausada';
                     
                     // Atualizar conexão
                     const connElement = document.getElementById('connectionStatus');
@@ -264,14 +302,35 @@
             }
         });
         
-        document.getElementById('pauseBtn').addEventListener('click', async () => {
+        // Modal de pausa: abrir ao clicar em Pausar
+        const pauseModal = document.getElementById('pauseModal');
+        const pauseModalConfirm = document.getElementById('pauseModalConfirm');
+        const pauseModalCancel = document.getElementById('pauseModalCancel');
+        
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            pauseModal.style.display = 'flex';
+        });
+        pauseModalCancel.addEventListener('click', () => {
+            pauseModal.style.display = 'none';
+        });
+        pauseModalConfirm.addEventListener('click', async () => {
+            const option = document.querySelector('input[name="pauseOption"]:checked').value;
+            pauseModal.style.display = 'none';
             try {
-                const response = await fetch('/api/printer/pause', { method: 'POST' });
+                const response = await fetch('/api/printer/pause', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ option: option })
+                });
                 const data = await response.json();
                 showNotification(data.message, data.success ? 'success' : 'error');
             } catch (error) {
                 showNotification('Erro ao pausar impressão', 'error');
             }
+        });
+        // Fechar modal ao clicar fora
+        pauseModal.addEventListener('click', (e) => {
+            if (e.target === pauseModal) pauseModal.style.display = 'none';
         });
         
         document.getElementById('resumeBtn').addEventListener('click', async () => {
@@ -345,17 +404,14 @@
             }
         });
         
-        // Imprimir arquivo da dashboard
+        // Imprimir arquivo da dashboard (chamado pelo botão .btn-print-file)
         async function printFileFromDashboard(fileId, fileName) {
             if (!confirm(`Iniciar impressão de "${fileName}"?`)) return;
-            
             try {
                 const response = await fetch(`/api/files/print/${fileId}`, { method: 'POST' });
                 const data = await response.json();
-                
                 if (data.success) {
                     showNotification(data.message, 'success');
-                    // Recarregar a página após 2 segundos para atualizar os dados
                     setTimeout(() => location.reload(), 2000);
                 } else {
                     showNotification(data.message, 'error');
@@ -364,6 +420,13 @@
                 showNotification('Erro ao iniciar impressão', 'error');
             }
         }
+        document.querySelector('.files-list')?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-print-file');
+            if (!btn) return;
+            const fileId = btn.getAttribute('data-file-id');
+            const fileName = btn.getAttribute('data-file-name') || '';
+            printFileFromDashboard(fileId, fileName);
+        });
         
         // Iniciar atualização automática
         updatePrinterStatus();

@@ -10,7 +10,7 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 |:-:|---|---|
 | 1 | Controle remoto | Acesso ao sistema de fora da rede local (túnel/nuvem) |
 | 2 | Sistema de cores | Mais cores (100+) e pré-visualização da mistura — **Implementado** ✅ |
-| 3 | Pause / Resume | Pausar e retomar impressão com estado salvo |
+| 3 | Pause / Resume | Pausar e retomar impressão com estado salvo — **Implementado** ✅ |
 | 4 | Detecção e skip de falhas | Receber erro da impressora, pular peça, resolver/retomar/cancelar |
 | 5 | Fatiador integrado | Enviar .stl do front → backend chama Orca → G-code na fila |
 | 6 | Redesign UX | Interface mais clara e responsiva |
@@ -63,15 +63,17 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ---
 
-## 3. Pause / Resume
+## 3. Pause / Resume — ✅ Implementado (pronto para teste)
 
-**Objetivo:** Pausar a impressão no meio, manter estado (posição, temperatura, linha do G-code) e **retomar** de onde parou.
+**Objetivo:** Pausar a impressão no meio, manter estado (posição, temperatura, linha do G-code) e **retomar** de onde parou. Essa base é também o que permite o fluxo da tarefa 4 (falhas): “Resolver problema → Problema resolvido → **Retomar**” (ver [definicoes-cliente.md](../projeto/definicoes-cliente.md) §5).
 
-**O que fazer:**
+**Contexto (definições do projeto):** A comunicação com a impressora é via **terminal/serial** (Python envia comandos; não é apenas USB genérico). Pause/Resume usa esse mesmo canal (G-code M0/M1 ou M600, etc.).
 
-- **Backend:** comando de pausa (G-code M0/M1 ou M600), **salvar estado** (posição X/Y/Z, temperatura, linha atual) e comando de retomada que usa esse estado.
-- **Frontend:** botão Pause e Resume no dashboard; mostrar estado (pausado/rodando). Opções ao pausar: manter temperatura, pause frio, troca de filamento.
-- Cuidados: manter temperatura do bico ao pausar (evitar entupir), retrair filamento quando fizer sentido, voltar à posição exata ao resumir.
+**O que foi entregue:**
+
+- **Backend:** Ao pausar, a thread salva estado na tabela `print_pause_state`: posição (M114), temperaturas alvo (M105), offset no G-code. Opções: manter temperatura (padrão), pausa fria (M104 S0 / M140 S0), troca de filamento (M600). Ao retomar, se pausa foi fria, reaquecimento (M109/M190). APIs: `POST /api/printer/pause` com body `{ "option": "keep_temp"|"cold"|"filament_change" }`, `POST /api/printer/resume`. Status retorna `state: "paused"` quando pausado.
+- **Frontend:** Botões Pausar e Retomar; estado (Imprimindo / Pausado / Ocioso). Modal ao clicar Pausar com as três opções. Botões habilitados conforme estado.
+- **Cuidados:** Temperatura mantida por padrão; pausa fria desliga aquecedores; retomada reaquece quando foi fria. Impressão continua do próximo comando no arquivo.
 
 **Entrega:** Vídeo mostrando pausa no meio da impressão e retomada correta.
 

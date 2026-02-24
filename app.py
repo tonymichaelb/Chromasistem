@@ -150,6 +150,10 @@ printing_thread = None
 printing_in_progress = False
 g28_executed = False  # Pular G28 duplicado durante a impressão
 g29_executed = False  # Pular G29 duplicado durante a impressão
+# Opção de pausa escolhida pelo usuário: keep_temp | cold | filament_change
+pause_option_requested = 'keep_temp'
+# Estado de pausa atual (preenchido pela thread ao pausar) para resume reaquecer se cold
+current_pause_state_job_id = None
 
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
@@ -572,6 +576,20 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # Estado de pausa (Task 3: Pause/Resume) — posição, temperatura, offset no G-code
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS print_pause_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            print_job_id INTEGER NOT NULL,
+            gcode_filename TEXT NOT NULL,
+            file_offset INTEGER NOT NULL,
+            pos_x REAL, pos_y REAL, pos_z REAL, pos_e REAL,
+            target_nozzle REAL, target_bed REAL,
+            pause_option TEXT DEFAULT 'keep_temp',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (print_job_id) REFERENCES print_jobs (id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -779,6 +797,17 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                 return None
         
         return None
+
+def get_current_position():
+    """Obtém posição atual X,Y,Z,E via M114 (Marlin). Retorna dict com x, y, z, e ou None."""
+    resp = send_gcode('M114', wait_for_ok=True, timeout=5)
+    if not resp:
+        return None
+    out = {}
+    for match in re.finditer(r'([XYZE]):\s*([-\d.]+)', resp, re.IGNORECASE):
+        out[match.group(1).lower()] = float(match.group(2))
+    return out if out else None
+
 
 # Ler status da impressora
 def get_printer_status_serial():
@@ -1454,7 +1483,7 @@ def printer_status():
                 'target_bed': target_bed,
                 'target_nozzle': target_nozzle
             },
-            'state': 'printing',
+            'state': 'paused' if (printing_in_progress and print_paused) else 'printing',
             'progress': current_progress,
             'filename': current_filename,
             'time_elapsed': time_elapsed,
@@ -1486,25 +1515,52 @@ def printer_status():
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
-    global print_paused, print_paused_by_filament
+    global print_paused, print_paused_by_filament, pause_option_requested
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    # Apenas pausar impressão - sem comandos adicionais
+    option = 'keep_temp'
+    data = request.get_json(silent=True) or {}
+    if data.get('option') in ('keep_temp', 'cold', 'filament_change'):
+        option = data['option']
+    pause_option_requested = option
     print_paused = True
     print_paused_by_filament = False
-    print("⏸️ Impressão pausada")
-    return jsonify({'success': True, 'message': 'Impressão pausada'})
+    print(f"⏸️ Impressão pausada (opção: {option})")
+    return jsonify({'success': True, 'message': 'Impressão pausada', 'option': option})
 
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
-    global print_paused, print_paused_by_filament
+    global print_paused, print_paused_by_filament, current_pause_state_job_id
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     
-    # Apenas retomar impressão - sem comandos adicionais
+    # Se a pausa foi "fria", reaquecer antes de retomar
+    if current_pause_state_job_id:
+        try:
+            conn = sqlite3.connect(DB_NAME)
+            cur = conn.cursor()
+            cur.execute(
+                'SELECT target_nozzle, target_bed, pause_option FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
+                (current_pause_state_job_id,)
+            )
+            row = cur.fetchone()
+            conn.close()
+            if row and row[2] == 'cold' and (row[0] or row[1]):
+                tn, tb = row[0] or 0, row[1] or 0
+                if tb > 0:
+                    send_gcode(f'M140 S{int(tb)}')
+                    send_gcode(f'M190 S{int(tb)}', timeout=300)
+                if tn > 0:
+                    send_gcode(f'M104 S{int(tn)}')
+                    send_gcode(f'M109 S{int(tn)}', timeout=300)
+                print("  🔥 Reaquecimento concluído (retomada de pausa fria)")
+        except Exception as e:
+            print(f"  ⚠️ Erro ao reaquecer na retomada: {e}")
+    
     print_paused = False
     print_paused_by_filament = False
+    current_pause_state_job_id = None
     print("▶️ Impressão retomada")
     return jsonify({'success': True, 'message': 'Impressão retomada'})
 
@@ -1829,14 +1885,18 @@ def print_file(file_id):
     import threading
     
     def print_gcode_file():
-        global print_paused, print_stopped, g28_executed, g29_executed, printing_in_progress
+        global print_paused, print_stopped, print_paused_by_filament, g28_executed, g29_executed, printing_in_progress
+        global pause_option_requested, current_pause_state_job_id
         printing_in_progress = True
+        pause_state_saved_this_pause = False  # salvar estado só uma vez por pausa
         try:
             # Resetar flags no início
             print_paused = False
             print_stopped = False
             g28_executed = False
             g29_executed = False
+            current_pause_state_job_id = None
+            pause_state_saved_this_pause = False
             
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
@@ -1886,10 +1946,52 @@ def print_file(file_id):
                         print("✗ Impressão PARADA pelo usuário")
                         break
                     
-                    # Verificar se impressão foi pausada
+                    # Verificar se impressão foi pausada — salvar estado na primeira vez
                     while print_paused and not print_stopped:
+                        if not pause_state_saved_this_pause:
+                            try:
+                                pos = get_current_position()
+                                temp_resp = send_gcode('M105')
+                                target_nozzle = target_bed = 0
+                                if temp_resp and 'T:' in temp_resp:
+                                    for ln in temp_resp.split('\n'):
+                                        if 'T:' in ln:
+                                            t = re.search(r'T:[\d.]+\s*/([\d.]+)', ln)
+                                            b = re.search(r'B:[\d.]+\s*/([\d.]+)', ln)
+                                            if t: target_nozzle = float(t.group(1))
+                                            if b: target_bed = float(b.group(1))
+                                            break
+                                file_offset = f.tell()
+                                option = 'keep_temp' if print_paused_by_filament else pause_option_requested
+                                conn_pause = sqlite3.connect(DB_NAME)
+                                cur_pause = conn_pause.cursor()
+                                cur_pause.execute('''
+                                    INSERT INTO print_pause_state
+                                    (print_job_id, gcode_filename, file_offset, pos_x, pos_y, pos_z, pos_e,
+                                     target_nozzle, target_bed, pause_option)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', (job_id, original_name, file_offset,
+                                      pos.get('x') if pos else None, pos.get('y') if pos else None,
+                                      pos.get('z') if pos else None, pos.get('e') if pos else None,
+                                      target_nozzle, target_bed, option))
+                                conn_pause.commit()
+                                conn_pause.close()
+                                current_pause_state_job_id = job_id
+                                if option == 'cold':
+                                    send_gcode('M104 S0')
+                                    send_gcode('M140 S0')
+                                    print("  ⏸️ Temperaturas desligadas (pausa fria)")
+                                elif option == 'filament_change':
+                                    send_gcode('M600', wait_for_ok=True, timeout=60)
+                                    print("  ⏸️ Comando M600 (troca de filamento) enviado")
+                            except Exception as e:
+                                print(f"  ⚠️ Erro ao salvar estado de pausa: {e}")
+                            pause_state_saved_this_pause = True
                         print("⏸️ Impressão em PAUSA...")
                         time.sleep(1)
+                    
+                    # Ao sair do while (retomada), resetar para próxima pausa
+                    pause_state_saved_this_pause = False
                     
                     # Se parou durante a pausa, sair
                     if print_stopped:
@@ -1899,7 +2001,6 @@ def print_file(file_id):
                     # ✅ VERIFICAR FILAMENTO - Pausar automaticamente se faltar
                     filament_check = check_filament_sensor(during_print=True)
                     if not filament_check.get('has_filament'):
-                        global print_paused_by_filament
                         print_paused_by_filament = True
                         print_paused = True
                         print("🚨 ALERTA: Filamento acabou! Impressão pausada automaticamente.")
