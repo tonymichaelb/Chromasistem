@@ -248,7 +248,7 @@ Após testar localmente com sucesso:
 
 Se todos os testes passaram, seu sistema Croma está pronto para uso! 🎉
 
-**Próximo passo**: Instalar no Raspberry Pi seguindo o guia [INSTALACAO_RASPBERRY.md](INSTALACAO_RASPBERRY.md)
+**Próximo passo**: Instalar no Raspberry Pi seguindo o guia [INSTALACAO_RASPBERRY.md](../infra-instalacao/INSTALACAO_RASPBERRY.md)
 
 ---
 

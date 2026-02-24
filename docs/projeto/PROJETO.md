@@ -34,7 +34,7 @@ Novo modo Wi-Fi de cores/
 ├── 📄 app.py                          # Backend Flask (API + Rotas)
 ├── 📄 requirements.txt                # Dependências Python
 ├── 📄 README.md                       # Documentação principal
-├── 📄 INSTALACAO_RASPBERRY.md         # Guia de instalação detalhado
+├── 📄 docs/infra-instalacao/INSTALACAO_RASPBERRY.md   # Guia de instalação detalhado
 ├── 📄 .gitignore                      # Arquivos ignorados pelo Git
 │
 ├── 🔧 run.sh                          # Script para execução rápida
@@ -79,7 +79,7 @@ source venv/bin/activate
 python app.py
 ```
 
-Consulte [INSTALACAO_RASPBERRY.md](INSTALACAO_RASPBERRY.md) para instruções detalhadas.
+Consulte [INSTALACAO_RASPBERRY.md](../infra-instalacao/INSTALACAO_RASPBERRY.md) para instruções detalhadas.
 
 ---
 
