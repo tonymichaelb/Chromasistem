@@ -4,10 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/croma
-Environment="PATH=/home/pi/croma/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/home/pi/croma/venv/bin/python app.py
+WorkingDirectory=/home/pi/Chromasistem
+Environment="PATH=/home/pi/Chromasistem/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PORT=8080"
+ExecStart=/home/pi/Chromasistem/venv/bin/python app.py
 Restart=always
 RestartSec=10
 

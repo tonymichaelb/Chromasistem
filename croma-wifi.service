@@ -6,8 +6,8 @@ Wants=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/pi/croma
-ExecStart=/usr/bin/python3 /home/pi/croma/wifi_manager.py monitor
+WorkingDirectory=/home/pi/Chromasistem
+ExecStart=/usr/bin/python3 /home/pi/Chromasistem/wifi_manager.py monitor
 Restart=always
 RestartSec=10
 

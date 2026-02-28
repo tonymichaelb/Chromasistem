@@ -2481,7 +2481,9 @@ if __name__ == '__main__':
     
     # Iniciar servidor
     try:
-        app.run(host='0.0.0.0', port=80, debug=True, use_reloader=False)
+        # porta pode ser ajustada via variável de ambiente PORT (padrão 8080)
+        port = int(os.environ.get('PORT', 8080))
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
     except KeyboardInterrupt:
         print("\n⏹️  Servidor interrompido pelo usuário")
     finally:
