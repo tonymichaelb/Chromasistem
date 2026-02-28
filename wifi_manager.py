@@ -176,6 +176,17 @@ def monitor_connection():
     """Monitor de conexão - inicia hotspot se desconectar"""
     hotspot_active = False
     
+    # --- espera inicial para dar tempo ao NetworkManager religar conexões
+    boot_wait = time.time()
+    print("⏳ Aguardando rede estabilizar (até 30s)...")
+    while time.time() - boot_wait < 30:
+        if check_wifi_connected() and get_current_ssid() != HOTSPOT_SSID:
+            print(f"✓ Conexão detectada durante inicialização: {get_current_ssid()}")
+            break
+        time.sleep(2)
+    else:
+        print("⚠️ Nenhuma rede detectada no boot, hotspot poderá ser ativado")
+    
     while True:
         try:
             wifi_connected = check_wifi_connected()
