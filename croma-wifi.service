@@ -1,7 +1,8 @@
 [Unit]
 Description=Croma WiFi Manager - Hotspot Automático
-After=network.target
-Wants=network.target
+# garantir que a rede esteja pronta antes de iniciar (evita CHDIR falha inicial)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple

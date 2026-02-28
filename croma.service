@@ -1,10 +1,16 @@
 [Unit]
 Description=Croma - Sistema de Monitoramento de Impressora 3D
-After=network.target
+# garantir que a rede esteja pronta antes de iniciar (especialmente após reboot)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/pi/Chromasistem
+
+# liberar porta 8080 antes de iniciar, evita falha caso algo esteja ocupando
+ExecStartPre=/usr/bin/fuser -k 8080/tcp || true
+
 Environment="PATH=/home/pi/Chromasistem/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PORT=8080"
 ExecStart=/home/pi/Chromasistem/venv/bin/python app.py
