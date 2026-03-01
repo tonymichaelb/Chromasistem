@@ -11,6 +11,8 @@ import re
 import base64
 import subprocess
 import shutil
+import shlex
+import sys
 from typing import Optional
 
 # Importar GPIO (com fallback para desenvolvimento em outros sistemas)
@@ -172,15 +174,25 @@ THUMBNAIL_FOLDER = 'static/thumbnails'
 ALLOWED_EXTENSIONS = {'gcode', 'gco', 'g'}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
+# Fatiador integrado (Task 5): pasta temporária para .stl/.obj e saída do Orca
+SLICER_TEMP_FOLDER = os.environ.get('SLICER_TEMP_FOLDER', 'slicer_temp')
+ALLOWED_3D_EXTENSIONS = {'stl', 'obj'}
+ORCA_SLICER_PATH = os.environ.get('ORCA_SLICER_PATH', 'orca-slicer')  # ou caminho completo ex: /usr/bin/orca-slicer
+ORCA_DATADIR = os.environ.get('ORCA_DATADIR', '')  # opcional: pasta com printer.json, preset, filament
+SLICER_TIMEOUT_SEC = int(os.environ.get('SLICER_TIMEOUT_SEC', '600'))  # 10 min
+
 # Criar pastas se não existirem
 if not os.path.exists(GCODE_FOLDER):
     os.makedirs(GCODE_FOLDER)
 if not os.path.exists(THUMBNAIL_FOLDER):
     os.makedirs(THUMBNAIL_FOLDER)
+if not os.path.exists(SLICER_TEMP_FOLDER):
+    os.makedirs(SLICER_TEMP_FOLDER)
 
 app.config['GCODE_FOLDER'] = GCODE_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+app.config['SLICER_TEMP_FOLDER'] = SLICER_TEMP_FOLDER
 
 # Dimensões da mesa (mm) — para visualização bed-preview (Task 4)
 BED_WIDTH_MM = float(os.environ.get('BED_WIDTH_MM', '220'))
@@ -911,6 +923,171 @@ def get_printer_status_serial():
 # Verificar extensão de arquivo permitida
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def allowed_3d_file(filename):
+    """Permite .stl e .obj para o fatiador integrado."""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_3D_EXTENSIONS
+
+
+def _log_slicer(msg: str, *args) -> None:
+    """Log do fatiador (para debug); pode trocar por logging depois."""
+    print(f"[slicer] {msg}", *args)
+
+def run_orca_slice(stl_path: str, output_dir: str, layer_height: Optional[float] = None,
+                   infill: Optional[int] = None) -> str:
+    """
+    Chama OrcaSlicer via CLI para fatiar o modelo.
+    Retorna o caminho do arquivo .gcode gerado.
+    Levanta RuntimeError em caso de falha.
+    """
+    _log_slicer("run_orca_slice: stl_path=%r output_dir=%r", stl_path, output_dir)
+    def _orca_valid(p):
+        if not p:
+            return False
+        if os.path.isabs(p):
+            return os.path.isfile(p)
+        return bool(shutil.which(p))
+    orca_bin = ORCA_SLICER_PATH if _orca_valid(ORCA_SLICER_PATH) else None
+    if not orca_bin and sys.platform == 'win32':
+        # Caminhos comuns no Windows (instalação padrão)
+        for base in [os.environ.get('ProgramFiles', 'C:\\Program Files'), os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')]:
+            for name in ['OrcaSlicer\\OrcaSlicer.exe', 'OrcaSlicer\\orca-slicer.exe']:
+                candidate = os.path.join(base, name)
+                if os.path.isfile(candidate):
+                    orca_bin = candidate
+                    break
+            if orca_bin:
+                break
+    if not orca_bin:
+            # Tentar caminhos comuns no Linux/macOS
+            for candidate in ['orca-slicer', 'OrcaSlicer', '/usr/bin/orca-slicer']:
+                if shutil.which(candidate):
+                    orca_bin = candidate
+                    break
+        if not orca_bin:
+            _log_slicer("OrcaSlicer não encontrado no PATH")
+            raise RuntimeError(
+                'OrcaSlicer não encontrado. Configure ORCA_SLICER_PATH ou instale o OrcaSlicer.'
+            )
+    _log_slicer("Orca bin: %s", orca_bin)
+
+    # Usar caminhos absolutos para o Orca encontrar o arquivo (no macOS o cwd do app pode ser outro)
+    stl_path_abs = os.path.abspath(stl_path)
+    output_dir_abs = os.path.abspath(output_dir)
+    _log_slicer("stl_path_abs=%s output_dir_abs=%s", stl_path_abs, output_dir_abs)
+    if not os.path.isfile(stl_path_abs):
+        _log_slicer("Arquivo STL não existe: %s", stl_path_abs)
+        raise RuntimeError(f'Arquivo não encontrado: {stl_path_abs}')
+    _log_slicer("Tamanho do STL: %s bytes", os.path.getsize(stl_path_abs))
+
+    cmd = [
+        orca_bin,
+        '--slice', '0',
+        '--outputdir', output_dir_abs,
+        '--allow-newer-file',
+        '--no-check', '1',  # evita falha em checagens (ex.: G92 E0 em layer_gcode)
+        stl_path_abs,
+    ]
+    if ORCA_DATADIR and os.path.isdir(ORCA_DATADIR):
+        settings_files = []
+        for name in ['printer.json', 'process.json', 'print.json']:
+            p = os.path.join(ORCA_DATADIR, name)
+            if os.path.isfile(p):
+                settings_files.append(p)
+        if settings_files:
+            cmd.extend(['--load-settings', ';'.join(settings_files)])
+        filaments_dir = os.path.join(ORCA_DATADIR, 'filament')
+        if os.path.isdir(filaments_dir):
+            for f in os.listdir(filaments_dir):
+                if f.endswith('.json'):
+                    cmd.extend(['--load-filaments', os.path.join(filaments_dir, f)])
+                    break
+    _log_slicer("Comando Orca: %s", cmd)
+
+    env = os.environ.copy()
+    if ORCA_DATADIR:
+        env['ORCA_SLICER_DATA_DIR'] = ORCA_DATADIR
+
+    log_path = os.path.join(output_dir_abs, '_orca_log.txt')
+    cwd = os.path.dirname(os.path.abspath(__file__)) or '.'
+
+    # Windows: rodar Orca diretamente com stdout/stderr em arquivo e sem abrir janela.
+    # Unix/macOS: redirect via shell (no macOS o Orca CLI pode falhar com "No such file: 1" em headless).
+    if sys.platform == 'win32':
+        _log_slicer("subprocess.run Orca (Windows) cwd=%s timeout=%s", cwd, SLICER_TIMEOUT_SEC)
+        create_no_window = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        try:
+            with open(log_path, 'w', encoding='utf-8', errors='replace') as log_file:
+                result = subprocess.run(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    timeout=SLICER_TIMEOUT_SEC,
+                    cwd=cwd,
+                    env=env,
+                    creationflags=create_no_window
+                )
+        except subprocess.TimeoutExpired:
+            _log_slicer("Orca expirou (timeout %s s)", SLICER_TIMEOUT_SEC)
+            raise RuntimeError(f'Fatiamento expirou após {SLICER_TIMEOUT_SEC} segundos.')
+    else:
+        cmd_shell = ' '.join(shlex.quote(a) for a in cmd) + ' > ' + shlex.quote(log_path) + ' 2>&1'
+        _log_slicer("subprocess.run (shell) cwd=%s timeout=%s", cwd, SLICER_TIMEOUT_SEC)
+        try:
+            result = subprocess.run(
+                ['sh', '-c', cmd_shell],
+                stdin=subprocess.DEVNULL,
+                timeout=SLICER_TIMEOUT_SEC,
+                cwd=cwd,
+                env=env
+            )
+        except subprocess.TimeoutExpired:
+            _log_slicer("Orca expirou (timeout %s s)", SLICER_TIMEOUT_SEC)
+            raise RuntimeError(f'Fatiamento expirou após {SLICER_TIMEOUT_SEC} segundos.')
+
+    _log_slicer("Orca returncode=%s", result.returncode)
+    if result.returncode != 0:
+        orca_err = ''
+        if os.path.isfile(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                    orca_err = f.read().strip()
+                    _log_slicer("Orca stderr/stdout (últimas 1500 chars): %s", orca_err[-1500:] if len(orca_err) > 1500 else orca_err)
+            except OSError as e:
+                _log_slicer("Não foi possível ler log: %s", e)
+        _log_slicer("Orca falhou com código %s", result.returncode)
+        err_snippet = (orca_err[-800:] if len(orca_err) > 800 else orca_err) if orca_err else ''
+        hint = ''
+        if sys.platform == 'darwin' and result.returncode == 253 and 'No such file: 1' in orca_err:
+            hint = ' No macOS o OrcaSlicer em linha de comando pode apresentar este erro; no Windows o fatiador integrado funciona normalmente. Enquanto isso, fatie o modelo no Orca pelo app e envie o arquivo .gcode em Arquivos.'
+        raise RuntimeError(
+            f'OrcaSlicer saiu com código {result.returncode}. '
+            f'Verifique se o modelo está válido e se o Orca está instalado corretamente. '
+            f'(arquivo: {stl_path_abs})'
+            + (f' Saída: {err_snippet}' if err_snippet else '')
+            + hint
+        )
+
+    # Orca gera .gcode com o mesmo nome base do .stl na pasta de saída
+    base = os.path.splitext(os.path.basename(stl_path))[0]
+    gcode_name = base + '.gcode'
+    gcode_path = os.path.join(output_dir_abs, gcode_name)
+    if not os.path.isfile(gcode_path):
+        # Procurar qualquer .gcode na pasta
+        listing = os.listdir(output_dir_abs)
+        _log_slicer("G-code %s não encontrado; conteúdo da pasta: %s", gcode_path, listing)
+        for f in listing:
+            if f.endswith('.gcode'):
+                gcode_path = os.path.join(output_dir_abs, f)
+                break
+        else:
+            _log_slicer("Nenhum .gcode na pasta de saída")
+            raise RuntimeError('OrcaSlicer não gerou arquivo .gcode na pasta de saída.')
+    _log_slicer("G-code gerado: %s (%s bytes)", gcode_path, os.path.getsize(gcode_path))
+    return gcode_path
+
 
 # Obter informações do arquivo G-code
 def get_gcode_info(filepath):
@@ -2096,6 +2273,143 @@ def upload_file():
         'file_id': file_id,
         'filename': original_name
     })
+
+
+# --- Fatiador integrado (Task 5): upload .stl/.obj → Orca → G-code na fila ---
+@app.route('/api/slicer/slice', methods=['POST'])
+def slicer_slice():
+    """Recebe .stl ou .obj, chama OrcaSlicer, salva G-code em gcode_files e retorna file_id."""
+    _log_slicer("POST /api/slicer/slice recebido")
+    if 'user_id' not in session:
+        _log_slicer("401: não autenticado")
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    if 'file' not in request.files:
+        _log_slicer("400: file não está em request.files (keys: %s)", list(request.files.keys()))
+        return jsonify({'success': False, 'message': 'Nenhum arquivo enviado'}), 400
+
+    file = request.files['file']
+    _log_slicer("Arquivo: filename=%r content_type=%r content_length=%s", file.filename, file.content_type, getattr(file, 'content_length', None))
+    if file.filename == '':
+        _log_slicer("400: filename vazio")
+        return jsonify({'success': False, 'message': 'Nenhum arquivo selecionado'}), 400
+
+    if not allowed_3d_file(file.filename):
+        _log_slicer("400: tipo não permitido %r", file.filename)
+        return jsonify({
+            'success': False,
+            'message': 'Tipo não permitido. Envie um arquivo .stl ou .obj'
+        }), 400
+
+    # Opções opcionais (form ou JSON)
+    layer_height = request.form.get('layer_height', type=float)
+    infill = request.form.get('infill', type=int)
+    _log_slicer("Opções: layer_height=%s infill=%s", layer_height, infill)
+
+    temp_base = os.path.join(app.config['SLICER_TEMP_FOLDER'], f"slice_{session['user_id']}_{int(time.time() * 1000)}")
+    input_dir = temp_base + '_in'
+    output_dir = temp_base + '_out'
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+    _log_slicer("Temp: input_dir=%s output_dir=%s", input_dir, output_dir)
+
+    original_name = secure_filename(file.filename) or 'model'
+    # Nome fixo no temp evita problemas de path/encoding no Orca (ex.: "No such file: 1")
+    stl_temp_name = 'model.stl' if original_name.lower().endswith('.stl') else 'model.obj'
+    stl_path = os.path.join(input_dir, stl_temp_name)
+    try:
+        file.save(stl_path)
+        _log_slicer("Arquivo salvo em %s", stl_path)
+    except Exception as e:
+        _log_slicer("Erro ao salvar: %s", e)
+        return jsonify({'success': False, 'message': f'Erro ao salvar arquivo: {str(e)}'}), 500
+
+    try:
+        size = os.path.getsize(stl_path)
+    except OSError as e:
+        size = 0
+        _log_slicer("getsize falhou: %s", e)
+    _log_slicer("Tamanho do arquivo salvo: %s bytes", size)
+    if size == 0:
+        _log_slicer("400: arquivo vazio após save")
+        return jsonify({
+            'success': False,
+            'message': 'Arquivo chegou vazio. Verifique se o arquivo foi selecionado corretamente e tente de novo. Se usar proxy (Vite), confira se o backend está na porta correta.'
+        }), 400
+
+    try:
+        gcode_path = run_orca_slice(stl_path, output_dir, layer_height=layer_height, infill=infill)
+        _log_slicer("run_orca_slice retornou: %s", gcode_path)
+    except RuntimeError as e:
+        _log_slicer("run_orca_slice falhou: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+    # Copiar G-code para gcode_files e registrar no banco (mesmo fluxo do upload)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    gcode_original_name = os.path.splitext(original_name)[0] + '.gcode'
+    gcode_filename = f"{timestamp}_{gcode_original_name}"
+    gcode_dest = os.path.join(app.config['GCODE_FOLDER'], gcode_filename)
+    try:
+        shutil.copy2(gcode_path, gcode_dest)
+        _log_slicer("G-code copiado para %s", gcode_dest)
+    except Exception as e:
+        _log_slicer("Erro ao copiar G-code: %s", e)
+        return jsonify({'success': False, 'message': f'Erro ao copiar G-code: {str(e)}'}), 500
+
+    file_info = get_gcode_info(gcode_dest)
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO gcode_files (user_id, filename, original_name, file_size)
+        VALUES (?, ?, ?, ?)
+    ''', (session['user_id'], gcode_filename, gcode_original_name, file_info['size']))
+    conn.commit()
+    file_id = cursor.lastrowid
+
+    thumbnail_path = extract_thumbnail(gcode_dest, file_id)
+    if thumbnail_path:
+        cursor.execute('UPDATE gcode_files SET thumbnail_path = ? WHERE id = ?', (thumbnail_path, file_id))
+        conn.commit()
+
+    metadata = parse_gcode_metadata(gcode_dest)
+    if metadata:
+        cursor.execute('''
+            UPDATE gcode_files 
+            SET print_time = ?, filament_used = ?, filament_type = ?, 
+                nozzle_temp = ?, bed_temp = ?, layer_height = ?, infill = ?,
+                slicer = ?, total_layers = ?, filament_density = ?, 
+                filament_diameter = ?, max_z_height = ?
+            WHERE id = ?
+        ''', (
+            metadata['print_time'], metadata['filament_used'], metadata['filament_type'],
+            metadata['nozzle_temp'], metadata['bed_temp'], metadata['layer_height'],
+            metadata['infill'], metadata['slicer'], metadata['total_layers'],
+            metadata['filament_density'], metadata['filament_diameter'],
+            metadata['max_z_height'], file_id
+        ))
+        conn.commit()
+    conn.close()
+
+    # Limpar temporários
+    try:
+        if os.path.isfile(stl_path):
+            os.remove(stl_path)
+        for f in os.listdir(output_dir):
+            os.remove(os.path.join(output_dir, f))
+        os.rmdir(output_dir)
+        os.rmdir(input_dir)
+        _log_slicer("Temp limpo")
+    except Exception as e:
+        _log_slicer("Aviso ao limpar temp: %s", e)
+
+    _log_slicer("Sucesso: file_id=%s filename=%s", file_id, gcode_original_name)
+    return jsonify({
+        'success': True,
+        'message': 'G-code gerado com sucesso',
+        'file_id': file_id,
+        'filename': gcode_original_name
+    })
+
 
 @app.route('/api/files/delete/<int:file_id>', methods=['DELETE'])
 def delete_file(file_id):

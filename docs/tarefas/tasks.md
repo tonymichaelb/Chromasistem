@@ -11,7 +11,7 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 | 1 | Controle remoto | Acesso ao sistema de fora da rede local (túnel/nuvem) |
 | 2 | Sistema de cores | Mais cores (100+) e pré-visualização da mistura — **Implementado** ✅ |
 | 3 | Pause / Resume | Pausar e retomar impressão com estado salvo — **Implementado** ✅ |
-| 4 | Detecção e skip de falhas | Receber erro da impressora, pular peça, resolver/retomar/cancelar |
+| 4 | Detecção e skip de falhas | Receber erro da impressora, pular peça, resolver/retomar/cancelar — **Implementado** ✅ |
 | 5 | Fatiador integrado | Enviar .stl do front → backend chama Orca → G-code na fila |
 | 6 | Redesign UX | Interface mais clara e responsiva |
 | 7 | Pontos de monitoramento | Exibir mensagens da impressora (lista definida pelo chefe) |
@@ -24,8 +24,8 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 |:-:|---|---|
 | 1 | Controle remoto | Validar acesso externo/nuvem desde o início; HTTPS, streaming câmera |
 | 2 | Sistema de cores | Entrega visível e testável local — **Implementado** ✅ |
-| 3 | Pause / Resume | Base operacional; usa Serial Manager já existente (ref. OctoPrint) |
-| 4 | Detecção e skip | Depende do fluxo de impressão; botão manual primeiro |
+| 3 | Pause / Resume | Base operacional; usa Serial Manager já existente (ref. OctoPrint) — **Implementado** ✅ |
+| 4 | Detecção e skip | Depende do fluxo de impressão; botão manual primeiro — **Implementado** ✅ |
 | 5 | Fatiador integrado | Fluxo completo: .stl → Orca CLI → G-code na fila |
 | 6 | Redesign UX | Unifica experiência de todas as telas; responsivo/PWA |
 | 7 | Pontos de monitoramento | Quando a lista de mensagens da impressora estiver definida |
@@ -79,28 +79,32 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ---
 
-## 4. Detecção e skip de falhas
+## 4. Detecção e skip de falhas — ✅ Implementado (pronto para teste)
 
 **Objetivo:** Quando der erro na impressão, o **sistema receber** esse erro, o usuário poder **pular a peça com defeito** ou **resolver → marcar resolvido → retomar** (ou cancelar). Ver qual peça pular com base numa **visualização da mesa**.
 
-**O que fazer:**
+**O que foi entregue:**
 
 - **Backend:**  
-  - Implementar a **comunicação** para receber o erro da impressora (hoje o erro **não entra no código**; exemplo de payload a ser definido).  
-  - OctoPrint no Raspberry pode ser o canal que já fala com a impressora; integrar com o Python.  
-  - Endpoint/lógica para “pular item atual”, “resolver problema”, “problema resolvido”, “retomar”, “cancelar”.  
-  - Salvar **log** de itens pulados e ações.  
-  - Catálogo de erros: a ser definido (lista dos que “geralmente acontecem”).
+  - Endpoint **`POST /api/printer/failure`** para receber notificação de falha (payload flexível: `code`, `message`, `source`; integração OctoPrint futura).  
+  - Endpoints **`POST /api/printer/failure/resolve`**, **`POST /api/printer/failure/resolved`** (resolver problema e retomar).  
+  - **`POST /api/printer/skip-object`** (body opcional `object_id`) para pular item; thread avança no G-code até próximo marcador `;object`/`;layer` sem enviar linhas.  
+  - **`GET /api/printer/bed-preview`**: retorna dimensões da mesa e lista de objetos (bbox em mm) parseados do G-code (Orca/Prusa com Label Objects).  
+  - **`GET /api/printer/failure-history`**: lista de entradas do log (detected, skipped, resolved, cancelled).  
+  - Tabela **`print_failure_log`**; status com `state: "failure"`, `failure_detected`, `failure_message`, `skipped_objects_count`.  
+  - Cancelar = reutilizar `POST /api/printer/stop` (limpa estado de falha).
 
-- **Frontend:**  
-  - Botão **“Pular item com defeito”** e opções: **Resolver problema**, **Problema resolvido**, **Retomar**, **Cancelar**.  
-  - **Visualização da mesa** (simulação das peças na impressora) para o usuário **escolher qual peça pular** quando houver várias.  
-  - Indicador de itens pulados e histórico de falhas.  
-  - Pesquisa de como fazer a **prévia da mesa no frontend**.
+- **Frontend (React):**  
+  - Card **"Falha detectada"** com mensagem e botões: **Pular item com defeito**, **Resolver problema**, **Problema resolvido — Retomar**, **Cancelar**.  
+  - Modal **"Pular item com defeito"** com **visualização 2D da mesa** (SVG, retângulos por objeto); seleção de peça e botão **"Pular este objeto"**; se não houver objetos no G-code, botão **"Pular item atual"**.  
+  - Indicador **"Itens pulados nesta impressão: N"** e botões **Histórico** / **Ver histórico de falhas**; modal com lista de entradas do log.
 
-- Observação: Bambu A1/A1 mini não pulam; FlashForge AD5X já pula (evidência em foto quando houver).
+- **Referência:** [deteccao-skip-falhas.md](deteccao-skip-falhas.md) (guia de implementação e o que o cliente deve testar).
 
-**Entrega:** Fluxo em que o erro chega ao sistema, o usuário escolhe pular/resolver/retomar/cancelar e, quando for pular, consegue ver a mesa e escolher a peça. Evidência em vídeo.
+- **Observação:** Bambu A1/A1 mini não suportam skip no firmware; FlashForge AD5X já pula. Para visualização da mesa com várias peças, o G-code deve ser fatiado com **Label Objects** ativo (OrcaSlicer/PrusaSlicer).
+
+**Entrega:** Fluxo em que o erro chega ao sistema, o usuário escolhe pular/resolver/retomar/cancelar e, quando for pular, consegue ver a mesa e escolher a peça. Evidência em vídeo (ver cenários em [deteccao-skip-falhas.md](deteccao-skip-falhas.md) §8).
+
 
 ---
 
@@ -122,6 +126,8 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
   - Botão para enviar o G-code gerado direto para impressão.
 
 **Entrega:** Upload de .stl → G-code gerado → impressão concluída pelo sistema (log + evidência de impressão OK).
+
+- **Guia de uso e teste (cliente):** [fatiador-integrado.md](fatiador-integrado.md) — como usar a tela Fatiador, configurar o Orca, testar e registrar a evidência.
 
 ---
 

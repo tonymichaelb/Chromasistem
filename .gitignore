@@ -10,4 +10,5 @@ ENV/
 .vscode/
 .DS_Store
 *.log
+slicer_temp/
 front-react/
