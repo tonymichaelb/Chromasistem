@@ -155,6 +155,14 @@ pause_option_requested = 'keep_temp'
 # Estado de pausa atual (preenchido pela thread ao pausar) para resume reaquecer se cold
 current_pause_state_job_id = None
 
+# Detecção de falhas (Task 4): erro da impressora ou "pular item" manual
+print_failure_detected = False
+current_failure_message = None
+current_failure_code = None
+# Skip: quando True, a thread avança no arquivo até o próximo objeto sem enviar
+skip_requested = False
+skip_object_id = None  # opcional: id do objeto a pular (para "escolher peça na mesa")
+
 # Configuração do banco de dados
 DB_NAME = 'croma.db'
 
@@ -173,6 +181,10 @@ if not os.path.exists(THUMBNAIL_FOLDER):
 app.config['GCODE_FOLDER'] = GCODE_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+# Dimensões da mesa (mm) — para visualização bed-preview (Task 4)
+BED_WIDTH_MM = float(os.environ.get('BED_WIDTH_MM', '220'))
+BED_DEPTH_MM = float(os.environ.get('BED_DEPTH_MM', '220'))
 
 # Configuração da conexão serial com a impressora
 SERIAL_PORT = '/dev/ttyACM0'  # Porta serial para placas Arduino/Marlin
@@ -590,6 +602,19 @@ def init_db():
             FOREIGN KEY (print_job_id) REFERENCES print_jobs (id)
         )
     ''')
+    # Log de falhas e skip (Task 4: Detecção e skip de falhas)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS print_failure_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            print_job_id INTEGER NOT NULL,
+            occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            failure_code TEXT,
+            failure_message TEXT,
+            action TEXT NOT NULL,
+            object_index_or_name TEXT,
+            FOREIGN KEY (print_job_id) REFERENCES print_jobs (id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -966,6 +991,63 @@ def extract_thumbnail(gcode_path, file_id):
     except Exception as e:
         print(f"Erro ao extrair thumbnail: {e}")
         return None
+
+
+def parse_gcode_objects_for_bed(gcode_path):
+    """
+    Percorre o G-code e extrai objetos (blocos entre marcadores ;object / ;LAYER).
+    Para cada objeto retorna bounding box em mm (min_x, min_y, max_x, max_y).
+    Orca/Prusa com "Label Objects" inserem comentários como "; object" ou ";OBJECT: nome".
+    """
+    objects = []
+    current = None  # { 'id': int, 'name': str|None, 'min_x', 'min_y', 'max_x', 'max_y' }
+    obj_id = 0
+    try:
+        with open(gcode_path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                raw_lower = line.lower().strip()
+                # Novo objeto: comentário contém "object" ou "layer" (início de bloco)
+                if raw_lower.startswith(';') and ('object' in raw_lower or 'layer' in raw_lower):
+                    if current is not None:
+                        if current.get('min_x') is not None:
+                            objects.append(current)
+                        current = None
+                    obj_id += 1
+                    name = None
+                    if 'object' in raw_lower:
+                        m = re.search(r'object[:\s]+(.+)', raw_lower, re.I)
+                        if m:
+                            name = m.group(1).strip().strip(';').strip() or None
+                    current = {
+                        'id': obj_id - 1,
+                        'name': name,
+                        'min_x': None,
+                        'min_y': None,
+                        'max_x': None,
+                        'max_y': None,
+                    }
+                    continue
+                if current is None:
+                    continue
+                cmd = line.split(';')[0].strip().upper()
+                if not cmd or (not cmd.startswith('G0') and not cmd.startswith('G1')):
+                    continue
+                x_m = re.search(r'\bX([-\d.]+)', line, re.I)
+                y_m = re.search(r'\bY([-\d.]+)', line, re.I)
+                x = float(x_m.group(1)) if x_m else None
+                y = float(y_m.group(1)) if y_m else None
+                if x is not None:
+                    current['min_x'] = x if current['min_x'] is None else min(current['min_x'], x)
+                    current['max_x'] = x if current['max_x'] is None else max(current['max_x'], x)
+                if y is not None:
+                    current['min_y'] = y if current['min_y'] is None else min(current['min_y'], y)
+                    current['max_y'] = y if current['max_y'] is None else max(current['max_y'], y)
+        if current is not None and current.get('min_x') is not None:
+            objects.append(current)
+    except Exception as e:
+        print(f"⚠️ Erro ao parsear objetos do G-code: {e}")
+    return objects
+
 
 def parse_gcode_metadata(gcode_path):
     """Extrai metadados completos do G-code (OrcaSlicer, PrusaSlicer, Cura, etc.)"""
@@ -1361,23 +1443,29 @@ def printer_status():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT pj.filename, pj.progress, pj.started_at, gf.print_time
+        SELECT pj.id, pj.filename, pj.progress, pj.started_at, gf.print_time
         FROM print_jobs pj
         LEFT JOIN gcode_files gf ON pj.filename = gf.original_name
-        WHERE pj.status = 'printing' 
-        ORDER BY pj.started_at DESC 
+        WHERE pj.status = 'printing'
+        ORDER BY pj.started_at DESC
         LIMIT 1
     ''')
     current_job = cursor.fetchone()
+    current_job_id = current_job[0] if current_job else None
+    cursor.execute(
+        'SELECT COUNT(*) FROM print_failure_log WHERE print_job_id = ? AND action = ?',
+        (current_job_id, 'skipped')
+    )
+    skipped_count = cursor.fetchone()[0] if current_job_id else 0
     conn.close()
-    
+
     # Se houver impressão ativa, consultar temperatura (M105 é seguro) mas evitar M27
     if current_job:
         is_printing = True
-        current_progress = current_job[1] if current_job else 0
-        current_filename = current_job[0] if current_job else ''
-        started_at = current_job[2] if current_job else None
-        print_time_str = current_job[3] if len(current_job) > 3 else None
+        current_progress = current_job[2] if current_job else 0
+        current_filename = current_job[1] if current_job else ''
+        started_at = current_job[3] if current_job else None
+        print_time_str = current_job[4] if len(current_job) > 4 else None
         
         # Consultar temperatura via M105, mas com cache para não interferir no streaming do G-code
         global _temp_last_check_print_ts, _temp_cache_print
@@ -1485,6 +1573,14 @@ def printer_status():
             except Exception as e:
                 print(f"⚠️ Erro ao calcular tempo: {e}, started_at={started_at}")
         
+        # Estado: falha tem prioridade sobre pausado (usuário deve resolver/skip/cancelar)
+        if printing_in_progress and print_failure_detected:
+            state = 'failure'
+        elif printing_in_progress and print_paused:
+            state = 'paused'
+        else:
+            state = 'printing'
+
         status = {
             'connected': printer_serial and printer_serial.is_open,
             'temperature': {
@@ -1493,12 +1589,16 @@ def printer_status():
                 'target_bed': target_bed,
                 'target_nozzle': target_nozzle
             },
-            'state': 'paused' if (printing_in_progress and print_paused) else 'printing',
+            'state': state,
             'progress': current_progress,
             'filename': current_filename,
             'time_elapsed': time_elapsed,
             'time_remaining': time_remaining,
-            'filament': check_filament_sensor(during_print=True)
+            'filament': check_filament_sensor(during_print=True),
+            'failure_detected': print_failure_detected,
+            'failure_message': current_failure_message,
+            'failure_code': current_failure_code,
+            'skipped_objects_count': skipped_count,
         }
         return jsonify({'success': True, 'status': status})
     
@@ -1519,9 +1619,198 @@ def printer_status():
         'filename': '',
         'time_elapsed': '00:00:00',
         'time_remaining': '00:00:00',
-        'filament': filament_info
+        'filament': filament_info,
+        'failure_detected': False,
+        'failure_message': None,
+        'failure_code': None,
+        'skipped_objects_count': 0,
     }
     return jsonify({'success': True, 'status': status})
+
+
+@app.route('/api/printer/failure', methods=['POST'])
+def printer_failure():
+    """Recebe notificação de falha (ex.: OctoPrint). Pausa a impressão e aguarda ação: resolver/skip/cancelar."""
+    global print_failure_detected, current_failure_message, current_failure_code, print_paused
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    data = request.get_json(silent=True) or {}
+    message = data.get('message') or 'Falha detectada na impressão'
+    code = data.get('code')
+    print_failure_detected = True
+    current_failure_message = message
+    current_failure_code = code
+    print_paused = True  # thread para de enviar G-code (mesmo loop que pause)
+    print(f"⚠️ Falha detectada: {message}" + (f" (código: {code})" if code else ""))
+    # Registrar no log (job atual, se houver)
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
+            ('printing',)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute('''
+                INSERT INTO print_failure_log (print_job_id, failure_code, failure_message, action)
+                VALUES (?, ?, ?, ?)
+            ''', (row[0], code, message, 'detected'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ Erro ao registrar falha no log: {e}")
+    return jsonify({'success': True, 'message': 'Falha registrada; aguardando ação'})
+
+
+@app.route('/api/printer/failure/resolve', methods=['POST'])
+def printer_failure_resolve():
+    """Marca que o usuário foi resolver o problema (feedback para UI/histórico)."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    # Estado "resolvendo" pode ser usado no futuro para histórico; por ora só confirma
+    return jsonify({'success': True, 'message': 'Aguardando problema resolvido'})
+
+
+@app.route('/api/printer/failure/resolved', methods=['POST'])
+def printer_failure_resolved():
+    """Problema resolvido: limpa falha e retoma a impressão (mesmo que resume)."""
+    global print_failure_detected, current_failure_message, current_failure_code, print_paused
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    print_failure_detected = False
+    current_failure_message = None
+    current_failure_code = None
+    print_paused = False
+    # Reaquecimento (se pausa fria) é feito ao chamar resume; aqui só limpamos falha e despausamos
+    # A thread já está no loop "while print_paused"; ao setar print_paused = False ela continua
+    return jsonify({'success': True, 'message': 'Problema resolvido; retomando impressão'})
+
+
+@app.route('/api/printer/skip-object', methods=['POST'])
+def printer_skip_object():
+    """Pular item com defeito: avança no G-code até o próximo objeto sem enviar (não consome filamento)."""
+    global skip_requested, skip_object_id, print_failure_detected, current_failure_message, current_failure_code, print_paused
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    data = request.get_json(silent=True) or {}
+    object_id = data.get('object_id')  # opcional: para "escolher peça na mesa" (fase 2)
+    skip_object_id = object_id  # global
+    skip_requested = True
+    print_failure_detected = False
+    current_failure_message = None
+    current_failure_code = None
+    print_paused = False  # thread sai do loop de pausa e fará o skip na próxima iteração
+
+    # Registrar no log (job atual)
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
+            ('printing',)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute('''
+                INSERT INTO print_failure_log (print_job_id, failure_message, action, object_index_or_name)
+                VALUES (?, ?, ?, ?)
+            ''', (row[0], 'Pular item solicitado pelo usuário', 'skipped', str(object_id) if object_id is not None else None))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ Erro ao registrar skip no log: {e}")
+
+    print("⏭️ Skip de objeto solicitado; thread avançará até o próximo objeto")
+    return jsonify({'success': True, 'message': 'Pulando item; impressão continuará no próximo objeto'})
+
+
+@app.route('/api/printer/failure-history', methods=['GET'])
+def printer_failure_history():
+    """Lista últimas entradas do log de falhas (para o job atual ou gerais)."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    limit = min(int(request.args.get('limit', 50)), 100)
+    print_job_id = request.args.get('print_job_id')  # opcional: filtrar por job
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    if print_job_id:
+        cur.execute('''
+            SELECT id, print_job_id, occurred_at, failure_code, failure_message, action, object_index_or_name
+            FROM print_failure_log WHERE print_job_id = ? ORDER BY occurred_at DESC LIMIT ?
+        ''', (int(print_job_id), limit))
+    else:
+        cur.execute('''
+            SELECT id, print_job_id, occurred_at, failure_code, failure_message, action, object_index_or_name
+            FROM print_failure_log ORDER BY occurred_at DESC LIMIT ?
+        ''', (limit,))
+    rows = cur.fetchall()
+    conn.close()
+    entries = [
+        {
+            'id': r['id'],
+            'print_job_id': r['print_job_id'],
+            'occurred_at': r['occurred_at'],
+            'failure_code': r['failure_code'],
+            'failure_message': r['failure_message'],
+            'action': r['action'],
+            'object_index_or_name': r['object_index_or_name'],
+        }
+        for r in rows
+    ]
+    return jsonify({'success': True, 'entries': entries})
+
+
+@app.route('/api/printer/bed-preview', methods=['GET'])
+def printer_bed_preview():
+    """Retorna dimensões da mesa e lista de objetos do G-code atual (para visualização e escolher peça a pular)."""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT pj.filename
+        FROM print_jobs pj
+        WHERE pj.status = ?
+        ORDER BY pj.started_at DESC
+        LIMIT 1
+    ''', ('printing',))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+    original_name = row[0]
+    cursor.execute(
+        'SELECT filename FROM gcode_files WHERE original_name = ? AND user_id = ?',
+        (original_name, session['user_id'])
+    )
+    file_row = cursor.fetchone()
+    conn.close()
+    if not file_row:
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+    filepath = os.path.join(app.config['GCODE_FOLDER'], file_row[0])
+    if not os.path.isfile(filepath):
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+    objects = parse_gcode_objects_for_bed(filepath)
+    out = []
+    for o in objects:
+        out.append({
+            'id': o['id'],
+            'name': o.get('name'),
+            'min_x': round(o['min_x'], 2) if o.get('min_x') is not None else None,
+            'min_y': round(o['min_y'], 2) if o.get('min_y') is not None else None,
+            'max_x': round(o['max_x'], 2) if o.get('max_x') is not None else None,
+            'max_y': round(o['max_y'], 2) if o.get('max_y') is not None else None,
+        })
+    return jsonify({
+        'success': True,
+        'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM},
+        'objects': out,
+    })
+
 
 @app.route('/api/printer/pause', methods=['POST'])
 def printer_pause():
@@ -1542,8 +1831,14 @@ def printer_pause():
 @app.route('/api/printer/resume', methods=['POST'])
 def printer_resume():
     global print_paused, print_paused_by_filament, current_pause_state_job_id
+    global print_failure_detected, current_failure_message, current_failure_code
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    # Limpar estado de falha ao retomar (fluxo "problema resolvido")
+    print_failure_detected = False
+    current_failure_message = None
+    current_failure_code = None
     
     # Se a pausa foi "fria", reaquecer antes de retomar
     if current_pause_state_job_id:
@@ -1595,12 +1890,16 @@ def printer_disconnect():
 @app.route('/api/printer/stop', methods=['POST'])
 def printer_stop():
     global print_stopped, print_paused
+    global print_failure_detected, current_failure_message, current_failure_code
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
-    
-    # Sinalizar parada
+
+    # Sinalizar parada e limpar estado de falha (fluxo "cancelar")
     print_stopped = True
     print_paused = False
+    print_failure_detected = False
+    current_failure_message = None
+    current_failure_code = None
     
     # Atualizar banco de dados - marcar impressão como cancelada
     conn = sqlite3.connect(DB_NAME)
@@ -1896,7 +2195,7 @@ def print_file(file_id):
     
     def print_gcode_file():
         global print_paused, print_stopped, print_paused_by_filament, g28_executed, g29_executed, printing_in_progress
-        global pause_option_requested, current_pause_state_job_id
+        global pause_option_requested, current_pause_state_job_id, skip_requested
         printing_in_progress = True
         pause_state_saved_this_pause = False  # salvar estado só uma vez por pausa
         try:
@@ -1907,6 +2206,7 @@ def print_file(file_id):
             g29_executed = False
             current_pause_state_job_id = None
             pause_state_saved_this_pause = False
+            # skip_requested não resetamos aqui; é setado pela API quando usuário pede skip
             
             print(f"\n▶️ Iniciando impressão: {original_name}")
             
@@ -2028,11 +2328,22 @@ def print_file(file_id):
                             print("✗ Impressão PARADA durante falta de filamento")
                             break
                     
+                    # Guardar linha bruta para detectar marcadores de objeto/camada (skip)
+                    raw_line = line
                     # Remover comentários e espaços
                     line = line.split(';')[0].strip()
                     
                     # Pular linhas vazias
                     if not line:
+                        line_count += 1
+                        continue
+                    
+                    # Skip de objeto: não enviar linhas até o próximo marcador ;object ou ;LAYER
+                    if skip_requested:
+                        raw_lower = raw_line.lower()
+                        if 'object' in raw_lower or 'layer' in raw_lower:
+                            skip_requested = False
+                            print("  ⏭️ Fim do skip; continuando no próximo objeto/camada")
                         line_count += 1
                         continue
                     
