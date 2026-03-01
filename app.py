@@ -1341,6 +1341,16 @@ def api_logout():
     session.clear()
     return jsonify({'success': True, 'message': 'Logout realizado com sucesso'})
 
+@app.route('/api/me', methods=['GET'])
+def api_me():
+    if 'user_id' not in session:
+        return jsonify({'success': False}), 401
+    return jsonify({'success': True, 'username': session.get('username', '')})
+
+@app.route('/api/version', methods=['GET'])
+def api_version():
+    return jsonify({'version': get_app_version()})
+
 # API de controle da impressora
 @app.route('/api/printer/status', methods=['GET'])
 def printer_status():
