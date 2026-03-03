@@ -11,4 +11,5 @@ ENV/
 .DS_Store
 *.log
 slicer_temp/
+.chroma_secret
 # front-react/

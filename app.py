@@ -28,8 +28,32 @@ import threading
 from collections import deque
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
-CORS(app)
+
+# Secret key persistente: evita invalidar sessões a cada restart
+def _get_secret_key():
+    key = os.environ.get('CHROMA_SECRET_KEY')
+    if key:
+        return key
+    secret_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.chroma_secret')
+    if os.path.isfile(secret_file):
+        with open(secret_file, 'rb') as f:
+            return f.read()
+    key = os.urandom(24)
+    try:
+        with open(secret_file, 'wb') as f:
+            f.write(key)
+    except OSError:
+        pass
+    return key
+
+app.secret_key = _get_secret_key()
+
+# Cookies em HTTP (acesso por IP 192.168.x.x): Secure=False, SameSite=Lax
+app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+CORS(app, supports_credentials=True)
 
 # Versão do app (mostrada no rodapé)
 _APP_VERSION_CACHE = None
@@ -1595,9 +1619,9 @@ def terminal():
 # API de autenticação
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
     
     if not username or not password:
         return jsonify({'success': False, 'message': 'Usuário e senha são obrigatórios'}), 400
@@ -1617,9 +1641,9 @@ def api_login():
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
     
     if not username or not password:
         return jsonify({'success': False, 'message': 'Usuário e senha são obrigatórios'}), 400
