@@ -92,9 +92,9 @@ echo "================================================"
 echo ""
 
 # Porta 80 requer root no Linux
+# IMPORTANTE: cd para PROJECT_DIR garante que app.py encontre front-react/dist (path relativo a __file__)
 if [ "$(id -u)" -eq 0 ]; then
     exec python app.py
 else
-    # Preserva variáveis de ambiente (PATH, etc.) para o venv
-    exec sudo -E env "PATH=$PATH" python app.py
+    exec sudo -E env "PATH=$PATH" bash -c "cd '$PROJECT_DIR' && exec python app.py"
 fi

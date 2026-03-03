@@ -195,7 +195,9 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['SLICER_TEMP_FOLDER'] = SLICER_TEMP_FOLDER
 
 # Build React (produção): se front-react/dist existir, Flask serve o SPA em vez dos templates
-REACT_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'front-react', 'dist')
+# Usar realpath para resolver symlinks e garantir path absoluto correto (importante ao rodar com sudo)
+_APP_DIR = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
+REACT_DIST = os.path.join(_APP_DIR, 'front-react', 'dist')
 USE_REACT_APP = os.path.isfile(os.path.join(REACT_DIST, 'index.html'))
 
 # Dimensões da mesa (mm) — para visualização bed-preview (Task 4)
@@ -3344,6 +3346,11 @@ if __name__ == '__main__':
     # Configurar sensor de filamento
     print("\n" + "="*50)
     print("🖨️  Chromasistem - Sistema de Monitoramento 3D")
+    print("="*50)
+    if USE_REACT_APP:
+        print("   Frontend: React (front-react/dist)")
+    else:
+        print("   Frontend: Templates HTML (build React não encontrado em front-react/dist)")
     print("="*50)
     setup_filament_sensor()
     print("="*50 + "\n")
