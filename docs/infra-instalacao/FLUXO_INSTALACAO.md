@@ -35,6 +35,10 @@ sudo raspi-config
 
 Acesse: **http://[IP-DO-RASPBERRY]** (porta 80)
 
+**Login padrão:** `admin` / `croma123` (criado automaticamente se não houver usuários)
+
+> Se o login ainda falhar, delete o banco e reinicie: `rm croma.db && ./run-prod.sh`
+
 ---
 
 ## Depois da primeira instalação

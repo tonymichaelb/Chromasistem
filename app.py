@@ -664,7 +664,13 @@ def init_db():
             FOREIGN KEY (print_job_id) REFERENCES print_jobs (id)
         )
     ''')
-    conn.commit()
+    # Criar usuário padrão se não existir nenhum (evita bloqueio de login/registro)
+    cursor.execute('SELECT COUNT(*) FROM users')
+    if cursor.fetchone()[0] == 0:
+        cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)',
+                       ('admin', hash_password('croma123')))
+        conn.commit()
+        print("✓ Usuário padrão criado: admin / croma123 (troque a senha após o primeiro login)")
     conn.close()
 
 # Hash de senha
