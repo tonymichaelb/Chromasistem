@@ -1,5 +1,7 @@
 # 📦 Instalação do Croma no Raspberry Pi
 
+> **Fluxo resumido:** veja [FLUXO_INSTALACAO.md](./FLUXO_INSTALACAO.md) para o passo a passo completo (primeira vez + depois).
+
 ## 🎯 Pré-requisitos
 
 - Raspberry Pi 2W (ou superior)
@@ -46,6 +48,7 @@ sudo apt install network-manager hostapd dnsmasq -y
 cd ~
 git clone https://github.com/tonymichaelb/Chromasistem.git
 cd Chromasistem
+git checkout feat/skip-and-failures-feature
 ```
 
 ### 5. Criar e Ativar Ambiente Virtual
@@ -72,6 +75,7 @@ mkdir -p static/thumbnails
 # Dar permissões
 chmod +x install.sh
 chmod +x run.sh
+chmod +x run-prod.sh
 
 # Adicionar usuário ao grupo dialout (para serial)
 sudo usermod -a -G dialout $USER
@@ -90,17 +94,28 @@ sudo raspi-config
 # Serial port hardware: YES
 ```
 
-### 9. Testar Instalação
+### 9. Instalar Node.js (para frontend React)
 
 ```bash
-# Ativar ambiente virtual
-source venv/bin/activate
-
-# Executar servidor
-python app.py
+# Opcional: necessário apenas para usar o frontend React
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
 ```
 
-Acesse no navegador: `http://IP_DO_RASPBERRY:8080`
+### 10. Testar Instalação
+
+**Com frontend React (recomendado):**
+```bash
+./run-prod.sh
+```
+
+**Ou manualmente (templates antigos):**
+```bash
+source venv/bin/activate
+sudo -E python app.py
+```
+
+Acesse no navegador: `http://IP_DO_RASPBERRY` (porta 80)
 
 ## 🔧 Configuração como Serviço (Iniciar Automaticamente)
 

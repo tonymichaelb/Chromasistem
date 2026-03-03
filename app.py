@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, abort
 from flask_cors import CORS
 import sqlite3
 import hashlib
@@ -193,6 +193,10 @@ app.config['GCODE_FOLDER'] = GCODE_FOLDER
 app.config['THUMBNAIL_FOLDER'] = THUMBNAIL_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['SLICER_TEMP_FOLDER'] = SLICER_TEMP_FOLDER
+
+# Build React (produção): se front-react/dist existir, Flask serve o SPA em vez dos templates
+REACT_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'front-react', 'dist')
+USE_REACT_APP = os.path.isfile(os.path.join(REACT_DIST, 'index.html'))
 
 # Dimensões da mesa (mm) — para visualização bed-preview (Task 4)
 BED_WIDTH_MM = float(os.environ.get('BED_WIDTH_MM', '220'))
@@ -1437,15 +1441,27 @@ def parse_gcode_metadata(gcode_path):
     
     return metadata
 
+def _serve_react_index():
+    """Serve index.html do build React quando USE_REACT_APP."""
+    if USE_REACT_APP:
+        return send_from_directory(REACT_DIST, 'index.html')
+    return None
+
 # Rotas de autenticação
 @app.route('/')
 def index():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
 @app.route('/login')
 def login():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     # Verificar se existem usuários cadastrados
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -1457,6 +1473,9 @@ def login():
 
 @app.route('/register')
 def register():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     # Verificar se já existem usuários
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -1472,6 +1491,9 @@ def register():
 
 @app.route('/dashboard')
 def dashboard():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
@@ -1516,14 +1538,19 @@ def dashboard():
 
 @app.route('/files')
 def files():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('files.html', username=session.get('username'))
 
 @app.route('/viewer')
-@app.route('/viewer')
 @app.route('/viewer/<path:filename>')
 def viewer(filename=None):
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
@@ -1556,6 +1583,9 @@ def viewer(filename=None):
 
 @app.route('/terminal')
 def terminal():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('terminal.html', username=session.get('username'))
@@ -2896,6 +2926,9 @@ def preview_gcode(file_id):
 
 @app.route('/wifi')
 def wifi_page():
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('wifi.html')
@@ -3034,6 +3067,9 @@ current_brush = 0  # Pincel T0 como padrão
 @app.route('/colorir')
 def colorir():
     """Página de seleção de pincéis (extrusores)"""
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('colorir.html', username=session.get('username'))
@@ -3041,9 +3077,48 @@ def colorir():
 @app.route('/mistura')
 def mistura():
     """Página de mistura de filamentos"""
+    r = _serve_react_index()
+    if r is not None:
+        return r
     if 'user_id' not in session:
         return redirect(url_for('login'))
     return render_template('mistura.html', username=session.get('username'))
+
+@app.route('/fatiador')
+def fatiador():
+    """Página do fatiador (slicer) - React SPA"""
+    r = _serve_react_index()
+    if r is not None:
+        return r
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return redirect(url_for('files'))  # fallback para templates antigos
+
+# Servir assets estáticos do build React (produção)
+@app.route('/assets/<path:path>')
+def serve_react_assets(path):
+    if USE_REACT_APP:
+        return send_from_directory(os.path.join(REACT_DIST, 'assets'), path)
+    abort(404)
+
+@app.route('/vite.svg')
+def serve_vite_svg():
+    if USE_REACT_APP and os.path.isfile(os.path.join(REACT_DIST, 'vite.svg')):
+        return send_from_directory(REACT_DIST, 'vite.svg')
+    abort(404)
+
+@app.route('/images/<path:path>')
+def serve_react_images(path):
+    """Serve imagens do build React (ex: logo) ou static/images"""
+    if USE_REACT_APP:
+        img_dir = os.path.join(REACT_DIST, 'images')
+        if os.path.isfile(os.path.join(img_dir, path)):
+            return send_from_directory(img_dir, path)
+    # Fallback: Flask static/images (templates antigos)
+    static_img = os.path.join('static', 'images', path)
+    if os.path.isfile(static_img):
+        return send_from_directory('static', os.path.join('images', path))
+    abort(404)
 
 @app.route('/api/printer/select-brush', methods=['POST'])
 def select_brush():
