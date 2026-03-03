@@ -29,16 +29,43 @@ else
     source venv/bin/activate
 fi
 
+# Verificar e instalar dependências do front-react
+if [ ! -d "front-react/node_modules" ]; then
+    echo ""
+    echo "Instalando dependências do frontend React..."
+    (cd front-react && npm install)
+fi
+
 echo ""
-echo "Iniciando servidor Flask..."
+echo "Iniciando backend (Flask) e frontend (React)..."
 echo ""
 echo "Acesse o sistema em:"
-echo "  → http://localhost:5000"
-echo "  → http://127.0.0.1:5000"
+echo "  → http://localhost:5173"
+echo "  → http://127.0.0.1:5173"
 echo ""
-echo "Pressione Ctrl+C para parar o servidor"
+echo "Pressione Ctrl+C para parar os servidores"
 echo "================================================"
 echo ""
 
-# Executar o aplicativo
-python app.py
+# Função para encerrar ambos os processos ao receber Ctrl+C
+cleanup() {
+    echo ""
+    echo "Parando servidores..."
+    kill $FLASK_PID $FRONT_PID 2>/dev/null
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+# Iniciar backend Flask em background (porta 80)
+python app.py &
+FLASK_PID=$!
+
+# Aguardar um pouco para o Flask subir
+sleep 2
+
+# Iniciar frontend React em background (porta 5173)
+(cd front-react && npm run dev) &
+FRONT_PID=$!
+
+# Aguardar até que o usuário pressione Ctrl+C
+wait

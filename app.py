@@ -198,6 +198,13 @@ app.config['SLICER_TEMP_FOLDER'] = SLICER_TEMP_FOLDER
 BED_WIDTH_MM = float(os.environ.get('BED_WIDTH_MM', '220'))
 BED_DEPTH_MM = float(os.environ.get('BED_DEPTH_MM', '220'))
 
+# Pause: park (retração, subir Z, ir para canto) — configurável por env
+PAUSE_RETRACT_MM = float(os.environ.get('PAUSE_RETRACT_MM', '5'))
+PAUSE_Z_LIFT_MM = float(os.environ.get('PAUSE_Z_LIFT_MM', '10'))
+PAUSE_PARK_X = float(os.environ.get('PAUSE_PARK_X', '0'))
+PAUSE_PARK_Y = float(os.environ.get('PAUSE_PARK_Y', '0'))
+TEMP_REHEAT_MARGIN = 5  # °C abaixo do alvo para considerar "precisa reaquecer"
+
 # Configuração da conexão serial com a impressora
 SERIAL_PORT = '/dev/ttyACM0'  # Porta serial para placas Arduino/Marlin
 SERIAL_BAUDRATE = 115200
@@ -835,6 +842,23 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
         
         return None
 
+def parse_m105_temps(response):
+    """Extrai temperatura atual do bico e da mesa da resposta do M105 (Marlin: T:atual/alvo B:atual/alvo)."""
+    if not response:
+        return None, None
+    cur_n = cur_b = None
+    for line in (response or '').split('\n'):
+        if 'T:' in line:
+            m = re.search(r'T:\s*([\d.]+)\s*/\s*[\d.]+', line)
+            if m:
+                cur_n = float(m.group(1))
+        if 'B:' in line:
+            m = re.search(r'B:\s*([\d.]+)\s*/\s*[\d.]+', line)
+            if m:
+                cur_b = float(m.group(1))
+    return cur_n, cur_b
+
+
 def get_current_position():
     """Obtém posição atual X,Y,Z,E via M114 (Marlin). Retorna dict com x, y, z, e ou None."""
     resp = send_gcode('M114', wait_for_ok=True, timeout=5)
@@ -960,11 +984,11 @@ def run_orca_slice(stl_path: str, output_dir: str, layer_height: Optional[float]
             if orca_bin:
                 break
     if not orca_bin:
-            # Tentar caminhos comuns no Linux/macOS
-            for candidate in ['orca-slicer', 'OrcaSlicer', '/usr/bin/orca-slicer']:
-                if shutil.which(candidate):
-                    orca_bin = candidate
-                    break
+        # Tentar caminhos comuns no Linux/macOS
+        for candidate in ['orca-slicer', 'OrcaSlicer', '/usr/bin/orca-slicer']:
+            if shutil.which(candidate):
+                orca_bin = candidate
+                break
         if not orca_bin:
             _log_slicer("OrcaSlicer não encontrado no PATH")
             raise RuntimeError(
@@ -2016,30 +2040,54 @@ def printer_resume():
     print_failure_detected = False
     current_failure_message = None
     current_failure_code = None
-    
-    # Se a pausa foi "fria", reaquecer antes de retomar
+
+    row = None
     if current_pause_state_job_id:
         try:
             conn = sqlite3.connect(DB_NAME)
             cur = conn.cursor()
             cur.execute(
-                'SELECT target_nozzle, target_bed, pause_option FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
+                'SELECT target_nozzle, target_bed, pause_option, pos_x, pos_y, pos_z FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
                 (current_pause_state_job_id,)
             )
             row = cur.fetchone()
             conn.close()
-            if row and row[2] == 'cold' and (row[0] or row[1]):
-                tn, tb = row[0] or 0, row[1] or 0
-                if tb > 0:
-                    send_gcode(f'M140 S{int(tb)}')
-                    send_gcode(f'M190 S{int(tb)}', timeout=300)
-                if tn > 0:
-                    send_gcode(f'M104 S{int(tn)}')
-                    send_gcode(f'M109 S{int(tn)}', timeout=300)
-                print("  🔥 Reaquecimento concluído (retomada de pausa fria)")
         except Exception as e:
-            print(f"  ⚠️ Erro ao reaquecer na retomada: {e}")
-    
+            print(f"  ⚠️ Erro ao carregar estado de pausa: {e}")
+
+    if row:
+        target_nozzle = row[0] or 0
+        target_bed = row[1] or 0
+        pos_x, pos_y, pos_z = row[3], row[4], row[5]
+
+        # Reaquecer sempre que temperatura atual estiver abaixo do alvo (pausa fria ou esfriou manualmente)
+        if target_nozzle > 0 or target_bed > 0:
+            temp_resp = send_gcode('M105')
+            cur_nozzle, cur_bed = parse_m105_temps(temp_resp)
+            need_heat_nozzle = target_nozzle > 0 and (cur_nozzle is None or cur_nozzle < target_nozzle - TEMP_REHEAT_MARGIN)
+            need_heat_bed = target_bed > 0 and (cur_bed is None or cur_bed < target_bed - TEMP_REHEAT_MARGIN)
+            if need_heat_bed:
+                send_gcode(f'M140 S{int(target_bed)}')
+                send_gcode(f'M190 S{int(target_bed)}', timeout=300)
+            if need_heat_nozzle:
+                send_gcode(f'M104 S{int(target_nozzle)}')
+                send_gcode(f'M109 S{int(target_nozzle)}', timeout=300)
+            if need_heat_nozzle or need_heat_bed:
+                print("  🔥 Reaquecimento concluído (retomada)")
+
+        # Unpark: voltar à posição salva e desretrair
+        if pos_x is not None and pos_y is not None and pos_z is not None:
+            try:
+                send_gcode('G90')
+                send_gcode(f'G0 X{pos_x:.2f} Y{pos_y:.2f} F3000')
+                send_gcode(f'G0 Z{pos_z:.2f} F300')
+                send_gcode('G91')
+                send_gcode(f'G1 E{PAUSE_RETRACT_MM:.2f} F300')
+                send_gcode('G90')
+                print("  📍 Retorno à posição de impressão (unpark)")
+            except Exception as e:
+                print(f"  ⚠️ Erro no unpark: {e}")
+
     print_paused = False
     print_paused_by_filament = False
     current_pause_state_job_id = None
@@ -2608,6 +2656,16 @@ def print_file(file_id):
                                 elif option == 'filament_change':
                                     send_gcode('M600', wait_for_ok=True, timeout=60)
                                     print("  ⏸️ Comando M600 (troca de filamento) enviado")
+                                # Park: retrair, subir Z, ir para o canto (evita pingar em cima da peça)
+                                try:
+                                    send_gcode('G91')
+                                    send_gcode(f'G1 E-{PAUSE_RETRACT_MM:.2f} F300')
+                                    send_gcode(f'G1 Z{PAUSE_Z_LIFT_MM:.2f} F300')
+                                    send_gcode('G90')
+                                    send_gcode(f'G0 X{PAUSE_PARK_X:.2f} Y{PAUSE_PARK_Y:.2f} F3000')
+                                    print("  📍 Bico estacionado no canto (park)")
+                                except Exception as park_e:
+                                    print(f"  ⚠️ Erro no park: {park_e}")
                             except Exception as e:
                                 print(f"  ⚠️ Erro ao salvar estado de pausa: {e}")
                             pause_state_saved_this_pause = True
