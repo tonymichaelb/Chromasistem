@@ -97,14 +97,24 @@ echo ""
 echo "Iniciando servidor na porta 80..."
 echo "Acesse: http://localhost ou http://[IP-DO-RASPBERRY]"
 echo "Pressione Ctrl+C para parar"
+echo ""
+echo "Se o navegador mostrar 'Não é possível acessar esse site':"
+echo "  1. No próprio Raspberry, teste: curl -I http://127.0.0.1"
+echo "  2. Verifique se a porta está em uso: sudo ss -tlnp | grep :80"
+echo "  3. Libere o firewall (se usar ufw): sudo ufw allow 80/tcp && sudo ufw reload"
 echo "================================================"
 echo ""
 
-# Porta 80 requer root no Linux
-# Usar caminho absoluto do app e PYTHONPATH para garantir que core.* e front-react/dist sejam encontrados
+# Porta 80 requer root no Linux. Usar sempre o Python do venv (path absoluto).
+PYTHON_BIN="$PROJECT_DIR/venv/bin/python"
 APP_PY="$PROJECT_DIR/app.py"
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "Erro: venv não encontrado em $PROJECT_DIR/venv"
+    exit 1
+fi
+export PYTHONPATH="$PROJECT_DIR"
 if [ "$(id -u)" -eq 0 ]; then
-    exec env PYTHONPATH="$PROJECT_DIR" python "$APP_PY"
+    exec "$PYTHON_BIN" "$APP_PY"
 else
-    exec sudo -E env "PATH=$PATH" "PYTHONPATH=$PROJECT_DIR" bash -c "cd '$PROJECT_DIR' && exec python '$APP_PY'"
+    exec sudo -E env "PATH=$PATH" "PYTHONPATH=$PROJECT_DIR" bash -c "cd '$PROJECT_DIR' && exec '$PYTHON_BIN' '$APP_PY'"
 fi
