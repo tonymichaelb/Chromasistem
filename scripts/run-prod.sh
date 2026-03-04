@@ -7,18 +7,27 @@
 
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Detectar raiz do projeto: script pode estar em ./run-prod.sh ou ./scripts/run-prod.sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/app.py" ]; then
+    PROJECT_DIR="$SCRIPT_DIR"
+elif [ -f "$SCRIPT_DIR/../app.py" ]; then
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+    echo "Erro: app.py não encontrado em $SCRIPT_DIR nem em $SCRIPT_DIR/.."
+    exit 1
+fi
 cd "$PROJECT_DIR"
 
 echo "================================================"
 echo "   Croma - Produção (Raspberry Pi)"
 echo "   Frontend React + Backend Flask"
+echo "   Projeto: $PROJECT_DIR"
 echo "================================================"
 echo ""
 
-# Verificar se está no diretório correto
 if [ ! -f "app.py" ]; then
-    echo "Erro: Execute este script no diretório do projeto"
+    echo "Erro: app.py não encontrado em $PROJECT_DIR"
     exit 1
 fi
 
@@ -92,9 +101,10 @@ echo "================================================"
 echo ""
 
 # Porta 80 requer root no Linux
-# IMPORTANTE: cd para PROJECT_DIR garante que app.py encontre front-react/dist (path relativo a __file__)
+# Usar caminho absoluto do app e PYTHONPATH para garantir que core.* e front-react/dist sejam encontrados
+APP_PY="$PROJECT_DIR/app.py"
 if [ "$(id -u)" -eq 0 ]; then
-    exec python app.py
+    exec env PYTHONPATH="$PROJECT_DIR" python "$APP_PY"
 else
-    exec sudo -E env "PATH=$PATH" bash -c "cd '$PROJECT_DIR' && exec python app.py"
+    exec sudo -E env "PATH=$PATH" "PYTHONPATH=$PROJECT_DIR" bash -c "cd '$PROJECT_DIR' && exec python '$APP_PY'"
 fi
