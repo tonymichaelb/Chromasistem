@@ -61,11 +61,9 @@ if ! command -v node &>/dev/null; then
 fi
 
 if command -v node &>/dev/null && [ -d "front-react" ]; then
-    if [ ! -d "front-react/node_modules" ]; then
-        echo "Instalando dependências do frontend React..."
-        (cd front-react && npm install)
-    fi
-    echo "Gerando build do React para produção..."
+    echo "Instalando dependências do frontend React..."
+    (cd front-react && npm ci --silent 2>/dev/null || npm install)
+    echo "Gerando build do React para produção (aguarde ~1 min)..."
     (cd front-react && npm run build)
     if [ -f "front-react/dist/index.html" ]; then
         echo "✓ Build React gerado em front-react/dist/"

@@ -21,7 +21,7 @@ if __name__ == '__main__':
     print("=" * 50 + "\n")
 
     try:
-        app.run(host='0.0.0.0', port=80, debug=True, use_reloader=False)
+        app.run(host='0.0.0.0', port=80, debug=False, use_reloader=False)
     except KeyboardInterrupt:
         print("\n⏹️  Servidor interrompido pelo usuário")
     finally:
