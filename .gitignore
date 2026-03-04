@@ -12,4 +12,5 @@ ENV/
 *.log
 slicer_temp/
 .chroma_secret
+app_old.py
 # front-react/

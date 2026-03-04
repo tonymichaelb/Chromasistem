@@ -30,9 +30,9 @@ Tudo pela mesma comunicação serial (Python → impressora); não é necessári
 
 ### 2.3 APIs
 
-- **`POST /api/printer/pause`** — Body opcional: `{ "option": "keep_temp" | "cold" | "filament_change" }`. Seta a opção e a flag de pausa; a thread é quem salva o estado e aplica cold/M600.
-- **`POST /api/printer/resume`** — Limpa a pausa; se o último estado salvo for pausa fria, reaquece (M140/M190 e M104/M109) e depois a thread continua.
-- **`GET /api/printer/status`** — Inclui `state: "paused"` quando há impressão em andamento e a flag de pausa está ativa.
+- **`POST /api/printer/pause`** — Body opcional: `{ "option": "keep_temp" | "cold" | "filament_change" }`. Seta a opção e a flag de pausa; a thread é quem salva o estado e aplica cold/M600. Código em `routes/printer_api.py` (endpoint) e `core/print_engine.py` (thread).
+- **`POST /api/printer/resume`** — Carrega estado do banco (ou da memória como fallback). Se pausa fria, **sempre** reaquece. Se pausa normal mas temperatura caiu, também reaquece. Faz unpark (volta à posição salva). Código em `routes/printer_api.py`.
+- **`GET /api/printer/status`** — Inclui `state: "paused"` quando há impressão em andamento e a flag de pausa está ativa. Código em `routes/printer_api.py`.
 
 ---
 

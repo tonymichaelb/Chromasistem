@@ -187,7 +187,7 @@ Por padrão configurado para:
 - **Porta:** `/dev/ttyUSB0`
 - **Baud Rate:** 115200
 
-Se sua impressora usar porta diferente, edite `app.py`:
+Se sua impressora usar porta diferente, edite `core/config.py` (ou defina via variável de ambiente):
 
 ```python
 SERIAL_PORT = '/dev/ttyUSB0'  # Alterar se necessário

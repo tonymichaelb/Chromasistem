@@ -146,7 +146,7 @@ GPIO.cleanup()
 
 ## Código do Sistema
 
-### Configuração no app.py
+### Configuração no código (core/config.py e core/filament.py)
 
 ```python
 # Pino do sensor

@@ -40,15 +40,41 @@
 
 ### **Pastas do Projeto**
 
-| Pasta | O que tem |
+| Pasta/Arquivo | O que tem |
 | --- | --- |
-| `app.py` | Aplicação principal Flask (rotas, API, serial) |
-| `templates/` | Páginas HTML (Jinja2) |
-| `static/` | CSS, JS, imagens |
+| `app.py` | Entry point — importa core/ e routes/, inicia o servidor |
+| `core/` | Lógica de negócio: config, estado global, banco, serial, filamento, G-code, thread de impressão |
+| `routes/` | Rotas Flask (Blueprints): auth, páginas, printer API, files API, WiFi API |
+| `front-react/` | Frontend React (src/ para dev, dist/ para produção) |
+| `templates/` | Templates Jinja2 (fallback sem build React) |
+| `static/` | CSS, JS, imagens, thumbnails |
+| `scripts/` | Scripts de execução e instalação (.sh) |
 | `gcode_files/` | Arquivos G-code enviados |
 | `docs/` | Documentação do projeto |
 | `requirements.txt` | Dependências Python |
-| `croma.service` | Exemplo de unit systemd para deploy no Pi |
+| `croma.service` | Unit systemd para deploy no Pi |
+
+**Detalhe dos módulos `core/`:**
+
+| Módulo | Responsabilidade |
+| --- | --- |
+| `config.py` | Flask app, CORS, constantes, variáveis de ambiente |
+| `state.py` | Estado mutável compartilhado (ex.: `print_paused`, `printer_serial`) |
+| `database.py` | Inicialização do SQLite, hash de senha |
+| `printer.py` | Conexão serial, `send_gcode`, leitura de temperatura/posição |
+| `filament.py` | Sensor de filamento (GPIO / Marlin M119) |
+| `gcode.py` | Parsing de G-code, thumbnails, metadados, OrcaSlicer CLI |
+| `print_engine.py` | Thread de impressão (envio linha a linha, pause/park, skip) |
+
+**Detalhe dos módulos `routes/`:**
+
+| Módulo | Endpoints |
+| --- | --- |
+| `auth.py` | `/api/login`, `/api/register`, `/api/logout`, `/api/me`, `/api/version` |
+| `pages.py` | `/`, `/dashboard`, `/files`, `/terminal`, `/colorir`, `/mistura`, `/fatiador`, `/wifi` |
+| `printer_api.py` | `/api/printer/*` (status, pause, resume, stop, gcode, brush, mixture, filament) |
+| `files_api.py` | `/api/files/*` (list, upload, delete, print, download, preview), `/api/slicer/slice` |
+| `wifi_api.py` | `/api/wifi/*` (scan, connect, status, saved, forget) |
 
 ---
 

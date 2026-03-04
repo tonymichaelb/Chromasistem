@@ -29,16 +29,31 @@ Sistema completo de monitoramento e controle de impressora 3D desenvolvido para 
 ## 📁 Estrutura do Projeto
 
 ```
-Novo modo Wi-Fi de cores/
+Chromasistem/
 │
-├── 📄 app.py                          # Backend Flask (API + Rotas)
+├── 📄 app.py                          # Entry point (importa core/ e routes/)
+├── 📁 core/                           # Lógica de negócio (backend)
+│   ├── config.py                      # Flask app, constantes, variáveis de ambiente
+│   ├── state.py                       # Estado mutável compartilhado (globals)
+│   ├── database.py                    # Inicialização do banco SQLite
+│   ├── printer.py                     # Comunicação serial, send_gcode, temps
+│   ├── filament.py                    # Sensor de filamento (GPIO / Marlin)
+│   ├── gcode.py                       # Parsing G-code, thumbnails, slicer
+│   └── print_engine.py                # Thread de impressão
+├── 📁 routes/                         # Rotas Flask (Blueprints)
+│   ├── auth.py                        # Login, register, logout
+│   ├── pages.py                       # Páginas HTML + assets React
+│   ├── printer_api.py                 # APIs /api/printer/*
+│   ├── files_api.py                   # APIs /api/files/* e /api/slicer/*
+│   └── wifi_api.py                    # APIs /api/wifi/*
 ├── 📄 requirements.txt                # Dependências Python
 ├── 📄 README.md                       # Documentação principal
-├── 📄 docs/infra-instalacao/INSTALACAO_RASPBERRY.md   # Guia de instalação detalhado
 ├── 📄 .gitignore                      # Arquivos ignorados pelo Git
 │
-├── 🔧 run.sh                          # Script para execução rápida
-├── 🔧 install.sh                      # Script de instalação automática
+├── 📁 scripts/                        # Scripts de execução e instalação
+│   ├── run.sh                         # Execução rápida (dev)
+│   ├── run-prod.sh                    # Produção (Raspberry Pi)
+│   └── install.sh                     # Instalação de dependências
 ├── 🔧 croma.service                   # Serviço systemd para autostart
 │
 ├── 📁 templates/                      # Templates HTML

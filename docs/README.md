@@ -45,20 +45,65 @@ Abra o navegador e acesse:
 
 ## Estrutura do Projeto
 
+O backend foi dividido em módulos para facilitar manutenção. O `app.py` é apenas o ponto de entrada.
+
 ```
 .
-├── app.py                      # Backend Flask
+├── app.py                      # Entry point — importa core/ e routes/, inicia o servidor
+├── core/                       # Lógica de negócio (backend)
+│   ├── config.py               # Flask app, CORS, constantes, variáveis de ambiente
+│   ├── state.py                # Estado mutável compartilhado entre módulos
+│   ├── database.py             # Inicialização do SQLite (tabelas, admin padrão)
+│   ├── printer.py              # Comunicação serial (send_gcode, connect, status, temps)
+│   ├── filament.py             # Sensor de filamento (GPIO / Marlin M119)
+│   ├── gcode.py                # Parsing de G-code, thumbnails, metadados, OrcaSlicer CLI
+│   └── print_engine.py         # Thread de impressão (envio G-code linha a linha)
+├── routes/                     # Rotas Flask organizadas por Blueprints
+│   ├── auth.py                 # /api/login, /api/register, /api/logout, /api/me
+│   ├── pages.py                # Páginas HTML (/, /dashboard, /files, /terminal, etc.)
+│   ├── printer_api.py          # /api/printer/* (status, pause, resume, stop, gcode, brush, etc.)
+│   ├── files_api.py            # /api/files/* (list, upload, delete, print, download, preview) + /api/slicer/slice
+│   └── wifi_api.py             # /api/wifi/* (scan, connect, status, saved, forget)
+├── front-react/                # Frontend React (src/ para dev, dist/ para produção)
+├── templates/                  # Templates Jinja2 (fallback quando build React não existe)
+├── static/                     # CSS, JS, imagens, thumbnails
+├── scripts/                    # Scripts de execução e instalação (.sh)
+│   ├── run.sh                  # Dev local
+│   ├── run-prod.sh             # Produção (Raspberry Pi)
+│   └── install.sh              # Instalação de dependências do sistema
+├── gcode_files/                # Arquivos G-code enviados pelo usuário
+├── docs/                       # Documentação do projeto
 ├── requirements.txt            # Dependências Python
-├── croma.db                    # Banco de dados SQLite (criado automaticamente)
-├── templates/
-│   ├── login.html              # Página de login
-│   ├── register.html           # Página de registro
-│   └── dashboard.html          # Painel de controle
-└── static/
-    ├── css/
-    │   └── style.css           # Estilos CSS
-    └── images/
-        └── logo-branca.png     # Logo do sistema Croma
+├── croma.db                    # Banco SQLite (criado automaticamente)
+└── croma.service               # Unit systemd para deploy no Pi
+```
+
+### Onde mexer para cada tipo de alteração
+
+| Quero alterar… | Arquivo(s) |
+|---|---|
+| Constantes, portas, env vars | `core/config.py` |
+| Tabelas do banco, migração | `core/database.py` |
+| Comunicação serial, envio de G-code | `core/printer.py` |
+| Sensor de filamento | `core/filament.py` |
+| Parsing de G-code, thumbnails, slicer | `core/gcode.py` |
+| Lógica da thread de impressão (pause, skip, progresso) | `core/print_engine.py` |
+| APIs da impressora (status, pause, resume, brush, etc.) | `routes/printer_api.py` |
+| APIs de arquivos (upload, delete, imprimir) | `routes/files_api.py` |
+| Autenticação (login, registro) | `routes/auth.py` |
+| Páginas HTML / assets React | `routes/pages.py` |
+| Wi-Fi (scan, connect) | `routes/wifi_api.py` |
+| Estado global (flags, caches) | `core/state.py` |
+| Frontend React | `front-react/src/` |
+
+### Convenção de estado compartilhado
+
+O estado mutável (variáveis globais como `print_paused`, `printer_serial`, etc.) fica em `core/state.py`. Todos os módulos acessam via:
+
+```python
+import core.state as st
+st.print_paused = True   # modifica
+if st.print_paused: ...  # lê
 ```
 
 ## Configuração da Impressora
@@ -71,14 +116,8 @@ ls /dev/tty*
 # Geralmente será /dev/ttyUSB0 ou /dev/ttyACM0
 ```
 
-2. Modifique o arquivo `app.py` para incluir a conexão serial real
-3. Ajuste os parâmetros de baudrate conforme sua impressora (geralmente 115200)
-
-### Integração com OctoPrint (Opcional)
-
-Se preferir usar OctoPrint como backend, você pode integrar usando a API do OctoPrint:
-- Instale OctoPrint no Raspberry Pi
-- Configure as chamadas de API no `app.py` para comunicar com OctoPrint
+2. Ajuste os parâmetros em `core/config.py` (SERIAL_PORT, SERIAL_BAUDRATE) ou via variáveis de ambiente
+3. Baudrate padrão: 115200
 
 ## Uso
 

@@ -28,7 +28,7 @@ Guia para implementar a **Task 4**: receber erro da impressora, permitir pular p
 
 ### 1.1 Estado de falha
 
-- [x] **Variáveis globais** (em `app.py`, junto às de pause):
+- [x] **Variáveis globais** (em `core/state.py`):
   - `print_failure_detected` (bool)
   - `current_failure_message` (str ou None)
   - `current_failure_code` (str ou None, opcional)

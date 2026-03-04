@@ -60,13 +60,17 @@ O **ChromaColors** é um sistema de variação de cores para impressoras 3D, pro
 
 ```
 Chromasistem/
-├── app.py             # Aplicação principal Flask
-├── templates/         # Páginas HTML (Jinja2)
+├── app.py             # Entry point (importa core/ e routes/)
+├── core/              # Lógica de negócio: config, state, DB, serial, filamento, G-code, thread
+├── routes/            # Rotas Flask (Blueprints): auth, pages, printer, files, wifi
+├── front-react/       # Frontend React (src/ dev, dist/ produção)
+├── templates/         # Templates Jinja2 (fallback sem React)
 ├── static/            # CSS, JS, imagens
-├── gcode_files/       # Arquivos G-code
+├── scripts/           # Scripts .sh (run, install, etc.)
+├── gcode_files/       # Arquivos G-code enviados
 ├── docs/              # Documentação
 ├── requirements.txt
-├── croma.service       # Exemplo systemd para Pi
+├── croma.service      # Unit systemd para Pi
 └── README.md
 ```
 

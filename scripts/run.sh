@@ -9,9 +9,12 @@ echo "   Monitoramento de Impressora 3D"
 echo "================================================"
 echo ""
 
+# Navegar ao diretório do projeto (um nível acima de scripts/)
+cd "$(dirname "$0")/.."
+
 # Verificar se está no diretório correto
 if [ ! -f "app.py" ]; then
-    echo "Erro: Execute este script no diretório do projeto"
+    echo "Erro: app.py não encontrado. Verifique a estrutura do projeto."
     exit 1
 fi
 

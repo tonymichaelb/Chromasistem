@@ -42,7 +42,7 @@ screen /dev/ttyUSB0 115200
 
 ### 4. Ajustar Porta no Código
 
-Edite o arquivo `app.py` e altere a variável `SERIAL_PORT`:
+Edite o arquivo `core/config.py` e altere a variável `SERIAL_PORT` (ou defina via variável de ambiente):
 
 ```python
 SERIAL_PORT = '/dev/ttyUSB0'  # Ou /dev/ttyAMA0 se usar GPIO
