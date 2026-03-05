@@ -241,10 +241,27 @@ def printer_failure():
 
 @printer_bp.route('/api/printer/failure/resolve', methods=['POST'])
 def printer_failure_resolve():
-    """Marca que o usuário foi resolver o problema (feedback para UI/histórico)."""
+    """Marca que o usuário foi resolver o problema (registra no histórico; impressão continua pausada até 'Problema resolvido')."""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
-    return jsonify({'success': True, 'message': 'Aguardando problema resolvido'})
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute(
+            'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
+            ('printing',)
+        )
+        row = cur.fetchone()
+        if row:
+            cur.execute('''
+                INSERT INTO print_failure_log (print_job_id, failure_code, failure_message, action)
+                VALUES (?, ?, ?, ?)
+            ''', (row[0], st.current_failure_code, st.current_failure_message or 'Falha detectada', 'resolving'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ Erro ao registrar 'resolving' no log: {e}")
+    return jsonify({'success': True, 'message': 'Aguardando problema resolvido — clique em "Problema resolvido — Retomar" quando terminar.'})
 
 
 @printer_bp.route('/api/printer/failure/resolved', methods=['POST'])

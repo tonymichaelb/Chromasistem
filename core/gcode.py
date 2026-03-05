@@ -267,9 +267,10 @@ def extract_thumbnail(gcode_path, file_id):
 
 def parse_gcode_objects_for_bed(gcode_path):
     """
-    Percorre o G-code e extrai objetos (blocos entre marcadores ;object / ;LAYER).
-    Para cada objeto retorna bounding box em mm (min_x, min_y, max_x, max_y).
-    Orca/Prusa com "Label Objects" inserem comentários como "; object" ou ";OBJECT: nome".
+    Percorre o G-code e extrai objetos (blocos entre marcadores de objeto).
+    Usa apenas marcadores "; printing object" / "; stop printing object" (Orca/Prusa).
+    Ignora "; LAYER" para não criar objetos espúrios.
+    Retorna lista com bounding box em mm (min_x, min_y, max_x, max_y) por objeto.
     """
     objects = []
     current = None
@@ -277,18 +278,23 @@ def parse_gcode_objects_for_bed(gcode_path):
     try:
         with open(gcode_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
-                raw_lower = line.lower().strip()
-                if raw_lower.startswith(';') and ('object' in raw_lower or 'layer' in raw_lower):
-                    if current is not None:
-                        if current.get('min_x') is not None:
-                            objects.append(current)
-                        current = None
+                raw = line.strip()
+                raw_lower = raw.lower()
+                if not raw_lower.startswith(';'):
+                    pass
+                elif 'stop printing object' in raw_lower:
+                    if current is not None and current.get('min_x') is not None:
+                        objects.append(current)
+                    current = None
+                    continue
+                elif 'printing object' in raw_lower and 'stop' not in raw_lower:
+                    if current is not None and current.get('min_x') is not None:
+                        objects.append(current)
                     obj_id += 1
                     name = None
-                    if 'object' in raw_lower:
-                        m = re.search(r'object[:\s]+(.+)', raw_lower, re.I)
-                        if m:
-                            name = m.group(1).strip().strip(';').strip() or None
+                    m = re.search(r'object[:\s]+(.+?)(?:\s*$|\s*;)', raw_lower, re.I)
+                    if m:
+                        name = m.group(1).strip().strip(';').strip() or None
                     current = {
                         'id': obj_id - 1,
                         'name': name,
@@ -298,6 +304,7 @@ def parse_gcode_objects_for_bed(gcode_path):
                         'max_y': None,
                     }
                     continue
+
                 if current is None:
                     continue
                 cmd = line.split(';')[0].strip().upper()

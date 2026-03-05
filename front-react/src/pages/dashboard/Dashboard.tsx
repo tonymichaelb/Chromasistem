@@ -266,6 +266,9 @@ export function Dashboard() {
                     <span className="ml-2 text-xs">(código: {status.failure_code})</span>
                   )}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  <strong>Resolver:</strong> clique em &quot;Estou resolvendo&quot; se for mexer na impressora; quando terminar, clique em &quot;Problema resolvido — Retomar&quot; para a impressão continuar.
+                </p>
                 <Button variant="ghost" size="sm" className="mt-1 h-8 w-fit px-2 text-muted-foreground" onClick={openFailureHistory}>
                   <HugeiconsIcon icon={Calendar03Icon} className="size-4" />
                   Ver histórico de falhas
@@ -275,10 +278,10 @@ export function Dashboard() {
                 <Button variant="secondary" onClick={openBedPreviewForSkip}>
                   Pular item com defeito
                 </Button>
-                <Button variant="secondary" onClick={failureResolve}>
-                  Resolver problema
+                <Button variant="secondary" onClick={failureResolve} title="Registra que você vai mexer na impressora; a impressão só retoma quando você clicar em 'Problema resolvido — Retomar'">
+                  Estou resolvendo
                 </Button>
-                <Button onClick={failureResolved}>
+                <Button onClick={failureResolved} title="Terminei de resolver; a impressão continua de onde parou">
                   Problema resolvido — Retomar
                 </Button>
                 <Button variant="destructive" onClick={openStopConfirm}>
@@ -550,14 +553,18 @@ export function Dashboard() {
                     {bedPreviewData.objects.map((obj) => {
                       const minX = obj.min_x ?? 0
                       const minY = obj.min_y ?? 0
-                      const w = (obj.max_x ?? minX) - minX || 1
-                      const h = (obj.max_y ?? minY) - minY || 1
+                      const maxX = obj.max_x ?? minX
+                      const maxY = obj.max_y ?? minY
+                      const w = maxX - minX || 1
+                      const h = maxY - minY || 1
+                      const depthMm = bedPreviewData.bed.depth_mm
+                      const svgY = depthMm - maxY
                       const selected = selectedObjectId === obj.id
                       return (
                         <rect
                           key={obj.id}
                           x={minX}
-                          y={minY}
+                          y={svgY}
                           width={w}
                           height={h}
                           fill={selected ? "var(--primary)" : "var(--primary / 0.3)"}

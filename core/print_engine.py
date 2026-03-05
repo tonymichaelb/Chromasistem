@@ -77,6 +77,7 @@ def run_print_job(filepath, original_name, job_id):
         with open(filepath, 'r') as f:
             line_count = 0
             lines_sent = 0
+            object_counter = 0
 
             for line in f:
                 if st.print_stopped:
@@ -188,19 +189,32 @@ def run_print_job(filepath, original_name, job_id):
                         break
 
                 raw_line = line
+                raw_lower = raw_line.lower().strip()
                 line = line.split(';')[0].strip()
+
+                if raw_lower.startswith(';') and 'printing object' in raw_lower and 'stop' not in raw_lower:
+                    object_counter += 1
 
                 if not line:
                     line_count += 1
                     continue
 
                 if st.skip_requested:
-                    raw_lower = raw_line.lower()
-                    if 'object' in raw_lower or 'layer' in raw_lower:
+                    skip_id = st.skip_object_id
+                    if skip_id is None:
+                        if 'object' in raw_lower or 'layer' in raw_lower:
+                            st.skip_requested = False
+                            print("  ⏭️ Fim do skip; continuando no próximo objeto/camada")
+                        line_count += 1
+                        continue
+                    current_index = object_counter - 1
+                    if current_index == skip_id:
+                        line_count += 1
+                        continue
+                    if current_index > skip_id:
                         st.skip_requested = False
-                        print("  ⏭️ Fim do skip; continuando no próximo objeto/camada")
-                    line_count += 1
-                    continue
+                        print(f"  ⏭️ Fim do skip do objeto {skip_id}; continuando no objeto {current_index}")
+                        # fall through para processar esta linha (início do próximo objeto)
 
                 cmd_upper = line.upper()
 
