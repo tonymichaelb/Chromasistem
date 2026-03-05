@@ -3,6 +3,9 @@
 from flask import Blueprint, request, jsonify, session, send_from_directory
 import sqlite3
 import os
+
+# Timeout para evitar "database is locked" quando outro request está usando o DB (ex.: upload)
+SQLITE_TIMEOUT = 15
 import time
 import shutil
 import threading
@@ -29,7 +32,7 @@ def list_files():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, original_name, file_size, uploaded_at, last_printed, print_count, filename, thumbnail_path,
@@ -90,48 +93,65 @@ def upload_file():
     filename = f"{timestamp}_{original_name}"
     filepath = os.path.join(flask_app.config['GCODE_FOLDER'], filename)
 
-    file.save(filepath)
-    file_info = get_gcode_info(filepath)
+    conn = None
+    try:
+        file.save(filepath)
+        file_info = get_gcode_info(filepath)
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO gcode_files (user_id, filename, original_name, file_size)
-        VALUES (?, ?, ?, ?)
-    ''', (session['user_id'], filename, original_name, file_info['size']))
-    conn.commit()
-    file_id = cursor.lastrowid
-
-    thumbnail_path = extract_thumbnail(filepath, file_id)
-    if thumbnail_path:
-        cursor.execute('UPDATE gcode_files SET thumbnail_path = ? WHERE id = ?',
-                       (thumbnail_path, file_id))
-        conn.commit()
-
-    metadata = parse_gcode_metadata(filepath)
-    if metadata:
+        conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+        cursor = conn.cursor()
         cursor.execute('''
-            UPDATE gcode_files 
-            SET print_time = ?, filament_used = ?, filament_type = ?, 
-                nozzle_temp = ?, bed_temp = ?, layer_height = ?, infill = ?,
-                slicer = ?, total_layers = ?, filament_density = ?, 
-                filament_diameter = ?, max_z_height = ?
-            WHERE id = ?
-        ''', (metadata['print_time'], metadata['filament_used'], metadata['filament_type'],
-              metadata['nozzle_temp'], metadata['bed_temp'], metadata['layer_height'],
-              metadata['infill'], metadata['slicer'], metadata['total_layers'],
-              metadata['filament_density'], metadata['filament_diameter'],
-              metadata['max_z_height'], file_id))
+            INSERT INTO gcode_files (user_id, filename, original_name, file_size)
+            VALUES (?, ?, ?, ?)
+        ''', (session['user_id'], filename, original_name, file_info['size']))
         conn.commit()
+        file_id = cursor.lastrowid
+        conn.close()
+        conn = None
 
-    conn.close()
+        thumbnail_path = extract_thumbnail(filepath, file_id)
+        metadata = parse_gcode_metadata(filepath)
 
-    return jsonify({
-        'success': True,
-        'message': 'Arquivo enviado com sucesso',
-        'file_id': file_id,
-        'filename': original_name
-    })
+        conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+        cursor = conn.cursor()
+        if thumbnail_path:
+            cursor.execute('UPDATE gcode_files SET thumbnail_path = ? WHERE id = ?',
+                           (thumbnail_path, file_id))
+            conn.commit()
+        if metadata:
+            cursor.execute('''
+                UPDATE gcode_files 
+                SET print_time = ?, filament_used = ?, filament_type = ?, 
+                    nozzle_temp = ?, bed_temp = ?, layer_height = ?, infill = ?,
+                    slicer = ?, total_layers = ?, filament_density = ?, 
+                    filament_diameter = ?, max_z_height = ?
+                WHERE id = ?
+            ''', (metadata.get('print_time'), metadata.get('filament_used'), metadata.get('filament_type'),
+                  metadata.get('nozzle_temp'), metadata.get('bed_temp'), metadata.get('layer_height'),
+                  metadata.get('infill'), metadata.get('slicer'), metadata.get('total_layers'),
+                  metadata.get('filament_density'), metadata.get('filament_diameter'),
+                  metadata.get('max_z_height'), file_id))
+            conn.commit()
+        conn.close()
+        conn = None
+
+        return jsonify({
+            'success': True,
+            'message': 'Arquivo enviado com sucesso',
+            'file_id': file_id,
+            'filename': original_name
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        flask_app.logger.exception('Erro no upload de G-code')
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao processar o arquivo: {str(e)}'
+        }), 500
 
 
 @files_bp.route('/api/slicer/slice', methods=['POST'])
@@ -212,7 +232,7 @@ def slicer_slice():
         return jsonify({'success': False, 'message': f'Erro ao copiar G-code: {str(e)}'}), 500
 
     file_info = get_gcode_info(gcode_dest)
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO gcode_files (user_id, filename, original_name, file_size)
@@ -270,7 +290,7 @@ def delete_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
 
     cursor.execute('SELECT filename FROM gcode_files WHERE id = ? AND user_id = ?',
@@ -303,7 +323,7 @@ def print_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
 
     cursor.execute('SELECT filename, original_name FROM gcode_files WHERE id = ? AND user_id = ?',
@@ -368,7 +388,7 @@ def download_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
     cursor.execute('SELECT filename, original_name FROM gcode_files WHERE id = ? AND user_id = ?',
                    (file_id, session['user_id']))
@@ -389,7 +409,7 @@ def preview_gcode(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
     cursor = conn.cursor()
     cursor.execute('SELECT filename FROM gcode_files WHERE id = ? AND user_id = ?',
                    (file_id, session['user_id']))
