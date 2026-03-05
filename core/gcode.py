@@ -43,7 +43,21 @@ def run_orca_slice(stl_path: str, output_dir: str, layer_height: Optional[float]
         if os.path.isabs(p):
             return os.path.isfile(p)
         return bool(shutil.which(p))
-    orca_bin = ORCA_SLICER_PATH if _orca_valid(ORCA_SLICER_PATH) else None
+
+    def _resolve_orca_path(p):
+        """Se for um .app no macOS, resolve para o binário em Contents/MacOS."""
+        if not p or sys.platform != 'darwin':
+            return p
+        p = p.strip()
+        if p.endswith('.app') and os.path.isdir(p):
+            app_name = os.path.basename(p)[:-4]
+            binary = os.path.join(p, 'Contents', 'MacOS', app_name)
+            if os.path.isfile(binary):
+                return binary
+        return p
+
+    orca_cfg = _resolve_orca_path(ORCA_SLICER_PATH)
+    orca_bin = orca_cfg if _orca_valid(orca_cfg) else None
     if not orca_bin and sys.platform == 'win32':
         for base in [os.environ.get('ProgramFiles', 'C:\\Program Files'), os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')]:
             for name in ['OrcaSlicer\\OrcaSlicer.exe', 'OrcaSlicer\\orca-slicer.exe']:
@@ -53,6 +67,10 @@ def run_orca_slice(stl_path: str, output_dir: str, layer_height: Optional[float]
                     break
             if orca_bin:
                 break
+    if not orca_bin and sys.platform == 'darwin':
+        default_macos = '/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer'
+        if os.path.isfile(default_macos):
+            orca_bin = default_macos
     if not orca_bin:
         for candidate in ['orca-slicer', 'OrcaSlicer', '/usr/bin/orca-slicer']:
             if shutil.which(candidate):

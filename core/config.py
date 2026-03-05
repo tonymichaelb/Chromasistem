@@ -3,6 +3,7 @@
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 import os
+import sys
 import subprocess
 import shutil
 import sys
@@ -177,7 +178,8 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 # ---------------------------------------------------------------------------
 SLICER_TEMP_FOLDER = os.environ.get('SLICER_TEMP_FOLDER', os.path.join(_PROJECT_ROOT, 'slicer_temp'))
 ALLOWED_3D_EXTENSIONS = {'stl', 'obj'}
-ORCA_SLICER_PATH = os.environ.get('ORCA_SLICER_PATH', 'orca-slicer')
+_DEFAULT_ORCA_MACOS = '/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer'
+ORCA_SLICER_PATH = os.environ.get('ORCA_SLICER_PATH', _DEFAULT_ORCA_MACOS if sys.platform == 'darwin' else 'orca-slicer')
 ORCA_DATADIR = os.environ.get('ORCA_DATADIR', '')
 SLICER_TIMEOUT_SEC = int(os.environ.get('SLICER_TIMEOUT_SEC', '600'))
 
