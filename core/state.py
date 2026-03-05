@@ -27,6 +27,9 @@ current_failure_code = None
 skip_requested = False
 skip_object_id = None
 
+_consecutive_cmd_failures = 0
+CONSECUTIVE_FAILURES_THRESHOLD = 3
+
 filament_status = {
     'has_filament': True,
     'sensor_enabled': True,

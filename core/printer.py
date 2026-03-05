@@ -10,6 +10,88 @@ from core.config import (SERIAL_PORT, SERIAL_BAUDRATE, SERIAL_TIMEOUT,
 import core.state as st
 
 
+_CRITICAL_ERROR_PATTERNS = (
+    'error:',
+    '!! ',
+    'printer halted',
+    'kill() called',
+    'thermal runaway',
+    'heating failed',
+    'mintemp triggered',
+    'maxtemp triggered',
+    'probing failed',
+    'homing failed',
+    'stop called',
+    'emergency stop',
+)
+
+_FALSE_POSITIVE_FRAGMENTS = (
+    'error:checksum',
+    'error:line number',
+    'error:no line number',
+    'format error',
+    'error:no checksum',
+)
+
+
+def _maybe_mark_failure_from_printer_line(line: str) -> bool:
+    """Detecta mensagens de erro critico do firmware (Marlin/RepRap) no fluxo serial.
+
+    Retorna True se uma falha critica foi detectada.
+    So dispara durante impressao ativa para evitar falsos positivos em comandos avulsos.
+    """
+    if not line or not st.printing_in_progress:
+        return False
+
+    if st.print_failure_detected:
+        return False
+
+    low = line.strip().lower()
+
+    if any(fp in low for fp in _FALSE_POSITIVE_FRAGMENTS):
+        return False
+
+    matched_pattern = None
+    for pattern in _CRITICAL_ERROR_PATTERNS:
+        if pattern in low:
+            matched_pattern = pattern
+            break
+
+    if not matched_pattern:
+        return False
+
+    error_msg = line.strip()
+    if len(error_msg) > 200:
+        error_msg = error_msg[:200] + '...'
+
+    code = 'FIRMWARE'
+    if 'thermal runaway' in low:
+        code = 'THERMAL_RUNAWAY'
+    elif 'mintemp' in low:
+        code = 'MINTEMP'
+    elif 'maxtemp' in low:
+        code = 'MAXTEMP'
+    elif 'heating failed' in low:
+        code = 'HEATING_FAILED'
+    elif 'halted' in low or 'kill' in low:
+        code = 'HALTED'
+    elif 'homing' in low:
+        code = 'HOMING_FAILED'
+    elif 'probing' in low:
+        code = 'PROBING_FAILED'
+    elif 'emergency' in low or 'stop called' in low:
+        code = 'EMERGENCY_STOP'
+
+    st.print_failure_detected = True
+    st.current_failure_message = error_msg
+    st.current_failure_code = code
+    st.print_paused = True
+
+    print(f"🚨 FALHA DETECTADA NA IMPRESSORA: [{code}] {error_msg}")
+
+    return True
+
+
 def connect_printer():
     try:
         if st.printer_serial and st.printer_serial.is_open:
@@ -164,6 +246,8 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                                 _maybe_mark_filament_runout_from_printer_line(line)
                             except Exception:
                                 pass
+
+                            _maybe_mark_failure_from_printer_line(line)
 
                             responses.append(line)
                             if 'ok' in line.lower():

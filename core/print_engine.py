@@ -14,6 +14,21 @@ from core.filament import check_filament_sensor
 import core.state as st
 
 
+def _log_failure_to_db(job_id, code, message):
+    """Registra falha detectada automaticamente na tabela print_failure_log."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO print_failure_log (print_job_id, failure_code, failure_message, action)
+            VALUES (?, ?, ?, ?)
+        ''', (job_id, code, message, 'detected'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  ⚠️ Erro ao registrar falha no log: {e}")
+
+
 def run_print_job(filepath, original_name, job_id):
     """Thread function that sends G-code to the printer line by line."""
     st.printing_in_progress = True
@@ -24,6 +39,7 @@ def run_print_job(filepath, original_name, job_id):
         st.g28_executed = False
         st.g29_executed = False
         st.current_pause_state_job_id = None
+        st._consecutive_cmd_failures = 0
         pause_state_saved_this_pause = False
 
         print(f"\n▶️ Iniciando impressão: {original_name}")
@@ -211,8 +227,28 @@ def run_print_job(filepath, original_name, job_id):
 
                 response = send_gcode(line, retries=2)
 
+                if st.print_failure_detected:
+                    _log_failure_to_db(job_id, st.current_failure_code, st.current_failure_message)
+                    st._consecutive_cmd_failures = 0
+                    continue
+
                 if response is None:
-                    print(f"⚠️ Comando falhou (linha {line_count}): {line} - CONTINUANDO impressão...")
+                    st._consecutive_cmd_failures += 1
+                    if st._consecutive_cmd_failures >= st.CONSECUTIVE_FAILURES_THRESHOLD:
+                        msg = (f"Impressora não respondeu a {st._consecutive_cmd_failures} "
+                               f"comandos consecutivos (último: {line.strip()})")
+                        st.print_failure_detected = True
+                        st.current_failure_message = msg
+                        st.current_failure_code = 'COMM_FAILURE'
+                        st.print_paused = True
+                        print(f"🚨 FALHA DE COMUNICAÇÃO: {msg}")
+                        _log_failure_to_db(job_id, 'COMM_FAILURE', msg)
+                        st._consecutive_cmd_failures = 0
+                        continue
+                    print(f"⚠️ Comando falhou (linha {line_count}): {line} - "
+                          f"tentativas sem resposta: {st._consecutive_cmd_failures}/{st.CONSECUTIVE_FAILURES_THRESHOLD}")
+                else:
+                    st._consecutive_cmd_failures = 0
 
                 line_count += 1
                 lines_sent += 1

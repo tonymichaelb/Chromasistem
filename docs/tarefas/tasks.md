@@ -9,10 +9,10 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 | # | Tarefa | O que entrega |
 |:-:|---|---|
 | 1 | Controle remoto | Acesso ao sistema de fora da rede local (túnel/nuvem) |
-| 2 | Sistema de cores | Mais cores (100+) e pré-visualização da mistura — **Implementado** ✅ |
-| 3 | Pause / Resume | Pausar e retomar impressão com estado salvo — **Implementado** ✅ |
+| 2 | Sistema de cores | Mais cores (100+) e pré-visualização da mistura — **Validado** ✅✅ |
+| 3 | Pause / Resume | Pausar e retomar impressão com estado salvo — **Validado** ✅✅ |
 | 4 | Detecção e skip de falhas | Receber erro da impressora, pular peça, resolver/retomar/cancelar — **Implementado** ✅ |
-| 5 | Fatiador integrado | Enviar .stl do front → backend chama Orca → G-code na fila |
+| 5 | Fatiador integrado | Enviar .stl do front → backend chama Orca → G-code na fila — **Implementado** ✅ |
 | 6 | Redesign UX | Interface mais clara e responsiva |
 | 7 | Pontos de monitoramento | Exibir mensagens da impressora (lista definida pelo chefe) |
 
@@ -23,10 +23,10 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 | Passo | Tarefa | Motivo |
 |:-:|---|---|
 | 1 | Controle remoto | Validar acesso externo/nuvem desde o início; HTTPS, streaming câmera |
-| 2 | Sistema de cores | Entrega visível e testável local — **Implementado** ✅ |
-| 3 | Pause / Resume | Base operacional; usa Serial Manager já existente (ref. OctoPrint) — **Implementado** ✅ |
+| 2 | Sistema de cores | Entrega visível e testável local — **Validado pelo cliente** ✅✅ |
+| 3 | Pause / Resume | Base operacional; usa Serial Manager já existente (ref. OctoPrint) — **Validado pelo cliente** ✅✅ |
 | 4 | Detecção e skip | Depende do fluxo de impressão; botão manual primeiro — **Implementado** ✅ |
-| 5 | Fatiador integrado | Fluxo completo: .stl → Orca CLI → G-code na fila |
+| 5 | Fatiador integrado | Fluxo completo: .stl → Orca CLI → G-code na fila — **Implementado** ✅ |
 | 6 | Redesign UX | Unifica experiência de todas as telas; responsivo/PWA |
 | 7 | Pontos de monitoramento | Quando a lista de mensagens da impressora estiver definida |
 
@@ -48,7 +48,7 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ---
 
-## 2. Sistema de cores (Colorir / Mistura) — ✅ Implementado (pronto para teste)
+## 2. Sistema de cores (Colorir / Mistura) — ✅✅ Validado pelo cliente
 
 **Objetivo:** Sair de ~19 cores e chegar a **100+ cores** com **pré-visualização** da mistura no front.
 
@@ -63,7 +63,7 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ---
 
-## 3. Pause / Resume — ✅ Implementado (pronto para teste)
+## 3. Pause / Resume — ✅✅ Validado pelo cliente
 
 **Objetivo:** Pausar a impressão no meio, manter estado (posição, temperatura, linha do G-code) e **retomar** de onde parou. Essa base é também o que permite o fluxo da tarefa 4 (falhas): “Resolver problema → Problema resolvido → **Retomar**” (ver [definicoes-cliente.md](../projeto/definicoes-cliente.md) §5).
 
@@ -75,7 +75,9 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 - **Frontend:** Botões Pausar e Retomar; estado (Imprimindo / Pausado / Ocioso). Modal ao clicar Pausar com as três opções. Botões habilitados conforme estado.
 - **Cuidados:** Temperatura mantida por padrão; pausa fria desliga aquecedores; retomada reaquece quando foi fria. Impressão continua do próximo comando no arquivo.
 
-**Entrega:** Vídeo mostrando pausa no meio da impressão e retomada correta.
+**Validação:** Cliente testou na impressora real. Pausa fria esfria o bico, retomada reaquece corretamente. Ao pausar o bico sai de cima da peça e vai para o canto, ao retomar volta para a posição correta. Tudo funcionando conforme esperado.
+
+**Entrega:** ~~Vídeo mostrando pausa no meio da impressão e retomada correta.~~ **Validado e aprovado pelo cliente.**
 
 ---
 
@@ -108,22 +110,23 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ---
 
-## 5. Fatiador integrado
+## 5. Fatiador integrado — ✅ Implementado (pronto para teste)
 
 **Objetivo:** Do **front**, o usuário envia um arquivo **.stl** (ou .obj); o **backend** chama o Orca (ou outro fatiador), gera o G-code e coloca na **fila de impressão**. Sem embedar o Orca no front — front só manda comando; Python fala com o fatiador.
 
-**O que fazer:**
+**O que foi entregue:**
 
 - **Backend:**  
-  - Endpoint que recebe arquivo 3D (.stl, .obj).  
-  - Chamar o fatiador (Orca/PrusaSlicer) via **linha de comando** (subprocess).  
-  - Orca hoje roda na **máquina local**; se no futuro rodar em servidor/nuvem, é aceitável.  
-  - Devolver o G-code gerado e **enviar para a fila** que já existe no Chromasistem.
+  - Endpoint `POST /api/slicer/slice` recebe arquivo 3D (.stl, .obj).  
+  - Chama OrcaSlicer via **linha de comando** (subprocess) com `run_orca_slice()`.  
+  - Orca roda na **máquina local**; detecta automaticamente no Windows (`C:\Program Files\OrcaSlicer\`) ou via `ORCA_SLICER_PATH`.  
+  - G-code gerado é salvo em `gcode_files/` e inserido no banco de dados.  
+  - Opção de enviar direto para impressão via `POST /api/files/print/<file_id>`.
 
-- **Frontend:**  
-  - Tela de **upload** de arquivo 3D.  
-  - Opções básicas de fatiamento (qualidade, preenchimento etc.).  
-  - Botão para enviar o G-code gerado direto para impressão.
+- **Frontend (React):**  
+  - Tela **Fatiador** (`/fatiador`) com **upload** de arquivo 3D.  
+  - Opções de qualidade (Rápido 0,28 mm / Normal 0,20 mm / Fininho 0,12 mm) e preenchimento (%).  
+  - Botão **Fatiar**; card "G-code gerado" com opções **Enviar para impressão** e **Ver em Arquivos**.
 
 **Entrega:** Upload de .stl → G-code gerado → impressão concluída pelo sistema (log + evidência de impressão OK).
 
@@ -162,15 +165,15 @@ Documento único com **cada tarefa** a entregar, ordem de execução, critérios
 
 ## Critérios de aceite por módulo (evidência)
 
-| Módulo | Critério de “pronto” | Evidência |
-|--------|----------------------|-----------|
-| Cores | Preview correto na UI + impressão com cor esperada | Screenshot + foto da peça |
-| Detecção e skip | Sistema recebe erro e pula item; usuário escolhe peça na mesa | Vídeo da impressão |
-| Pause / Resume | Pausa mantém estado; retoma corretamente | Vídeo da operação |
-| UX | Interface aprovada | Screenshot + OK formal |
-| Fatiador | G-code gerado e enviado para impressão | Log + impressão OK |
-| Controle remoto | Acesso externo com autenticação | Demo ao vivo |
-| Monitoramento | Lista de mensagens definida e exibida no front | Conforme combinado |
+| Módulo | Critério de “pronto” | Evidência | Status |
+|--------|----------------------|-----------|--------|
+| Cores | Preview correto na UI + impressão com cor esperada | Screenshot + foto da peça | **Validado** ✅✅ |
+| Pause / Resume | Pausa mantém estado; retoma corretamente | Vídeo da operação | **Validado** ✅✅ |
+| Detecção e skip | Sistema recebe erro e pula item; usuário escolhe peça na mesa | Vídeo da impressão | Implementado ✅ — aguardando teste |
+| Fatiador | G-code gerado e enviado para impressão | Log + impressão OK | Implementado ✅ — aguardando teste |
+| UX | Interface aprovada | Screenshot + OK formal | Pendente |
+| Controle remoto | Acesso externo com autenticação | Demo ao vivo | Pendente |
+| Monitoramento | Lista de mensagens definida e exibida no front | Conforme combinado | Pendente |
 
 ---
 
