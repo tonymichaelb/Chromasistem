@@ -267,29 +267,16 @@ def extract_thumbnail(gcode_path, file_id):
 
 def parse_gcode_objects_for_bed(gcode_path):
     """
-    Extrai um bounding box por PEÇA FÍSICA na mesa, pensando no uso de
-    "pular item com defeito" e no preview da mesa.
+    Extrai um bounding box por PEÇA FÍSICA na mesa (preview e "pular item com defeito").
 
-    Em vez de depender de id/copy do slicer, usamos a GEOMETRIA da
-    primeira camada com extrusão:
-
-    - Lemos o G-code até o primeiro ";LAYER_CHANGE" depois da primeira
-      extrusão.
-    - Dentro dessa região, agrupamos movimentos G1 COM EXTRUSÃO (E>0)
-      em "ilhas": quando o próximo ponto extrudado está muito longe do
-      anterior, abrimos uma nova ilha.
-    - Cada ilha vira um objeto com bounding box (min_x, min_y, max_x, max_y).
+    Usa os blocos do slicer: cada trecho entre "; printing object ..." e
+    "; stop printing object ..." é um objeto. O índice do objeto é a ordem
+    do bloco (0, 1, 2, ...), igual ao object_counter do print_engine.
+    Assim temos uma única área de clique por peça.
     """
-    # Distância mínima em mm para considerar que começou outra peça.
-    # Usamos um valor relativamente grande para separar cubos/peças
-    # espalhados na mesa, mesmo olhando o arquivo inteiro (todas layers).
-    DIST_THRESHOLD_MM = 25.0
-
-    objects = []
-    current = None  # bbox da ilha atual
-    last_extrude_pos = None  # (x, y) do último ponto extrudado
-    last_x = None
-    last_y = None
+    segments = []
+    current = None
+    current_name = None
 
     try:
         with open(gcode_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -298,84 +285,73 @@ def parse_gcode_objects_for_bed(gcode_path):
                 low = raw.lower()
 
                 if low.startswith(";"):
+                    if "stop printing object" in low:
+                        if current is not None and current.get("min_x") is not None:
+                            segments.append({"name": current_name, **current})
+                        current = None
+                        current_name = None
+                        continue
+                    if "printing object" in low and "stop" not in low:
+                        if current is not None and current.get("min_x") is not None:
+                            segments.append({"name": current_name, **current})
+                        m_name = re.search(
+                            r"printing object\s+(.+?)(?:\s+id:|\s*$)", raw, re.I
+                        )
+                        current_name = (
+                            m_name.group(1).strip().strip(";").strip()
+                            if m_name
+                            else None
+                        )
+                        current = {
+                            "min_x": None,
+                            "min_y": None,
+                            "max_x": None,
+                            "max_y": None,
+                        }
+                        continue
+
+                if current is None:
                     continue
 
                 cmd = line.split(";", 1)[0].strip().upper()
                 if not cmd or (not cmd.startswith("G0") and not cmd.startswith("G1")):
                     continue
 
-                # Atualizar posição X/Y atual
                 x_m = re.search(r"\bX([-\d.]+)", cmd, re.I)
                 y_m = re.search(r"\bY([-\d.]+)", cmd, re.I)
-                if x_m:
-                    last_x = float(x_m.group(1))
-                if y_m:
-                    last_y = float(y_m.group(1))
-                if last_x is None or last_y is None:
-                    continue
+                x = float(x_m.group(1)) if x_m else None
+                y = float(y_m.group(1)) if y_m else None
+                if x is not None:
+                    current["min_x"] = (
+                        x if current["min_x"] is None else min(current["min_x"], x)
+                    )
+                    current["max_x"] = (
+                        x if current["max_x"] is None else max(current["max_x"], x)
+                    )
+                if y is not None:
+                    current["min_y"] = (
+                        y if current["min_y"] is None else min(current["min_y"], y)
+                    )
+                    current["max_y"] = (
+                        y if current["max_y"] is None else max(current["max_y"], y)
+                    )
 
-                # Detectar extrusão (E>0, ignorando retrações)
-                e_m = re.search(r"\bE([-\d.]+)", cmd, re.I)
-                is_extrude = e_m is not None and not cmd.startswith("G0")
-                if is_extrude and e_m:
-                    try:
-                        if float(e_m.group(1)) < 0:
-                            is_extrude = False
-                        # retrações explícitas são ignoradas
-                    except ValueError:
-                        pass
-                if not is_extrude:
-                    continue
-
-                x = last_x
-                y = last_y
-
-                # Se ainda não temos nenhuma ilha, criamos a primeira
-                if last_extrude_pos is None:
-                    current = {
-                        "min_x": x,
-                        "min_y": y,
-                        "max_x": x,
-                        "max_y": y,
-                    }
-                    objects.append(current)
-                else:
-                    dx = x - last_extrude_pos[0]
-                    dy = y - last_extrude_pos[1]
-                    dist2 = dx * dx + dy * dy
-                    if dist2 > (DIST_THRESHOLD_MM * DIST_THRESHOLD_MM):
-                        # Nova peça física (nova ilha)
-                        current = {
-                            "min_x": x,
-                            "min_y": y,
-                            "max_x": x,
-                            "max_y": y,
-                        }
-                        objects.append(current)
-                    else:
-                        # Continua na mesma peça; atualiza bbox
-                        current["min_x"] = min(current["min_x"], x)
-                        current["min_y"] = min(current["min_y"], y)
-                        current["max_x"] = max(current["max_x"], x)
-                        current["max_y"] = max(current["max_y"], y)
-
-                last_extrude_pos = (x, y)
+        if current is not None and current.get("min_x") is not None:
+            segments.append({"name": current_name, **current})
     except Exception as e:
         print(f"⚠️ Erro ao parsear objetos do G-code: {e}")
         return []
 
     result = []
-    for idx, obj in enumerate(objects):
-        if obj.get("min_x") is None:
-            continue
+    for idx, seg in enumerate(segments):
         result.append(
             {
                 "id": idx,
-                "name": f"Objeto {idx + 1}",
-                "min_x": obj["min_x"],
-                "min_y": obj["min_y"],
-                "max_x": obj["max_x"],
-                "max_y": obj["max_y"],
+                "name": seg.get("name") or f"Objeto {idx + 1}",
+                "min_x": seg["min_x"],
+                "min_y": seg["min_y"],
+                "max_x": seg["max_x"],
+                "max_y": seg["max_y"],
             }
         )
     return result
