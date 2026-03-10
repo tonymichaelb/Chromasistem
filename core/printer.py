@@ -285,6 +285,15 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                 else:
                     print(f"  ⚠️ Nenhuma resposta para '{command.strip()}' (timeout {timeout:.0f}s)")
                     return None
+            except (OSError, serial.SerialException) as e:
+                print(f"Erro ao enviar comando '{command.strip()}': {e}")
+                try:
+                    if st.printer_serial:
+                        st.printer_serial.close()
+                except Exception:
+                    pass
+                st.printer_serial = None
+                return None
             except Exception as e:
                 if attempt < retries - 1:
                     print(f"  ⚠️ Erro ao enviar '{command.strip()}': {e}, tentando novamente ({attempt + 2}/{retries})...")

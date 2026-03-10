@@ -120,10 +120,13 @@ def run_print_job(filepath, original_name, job_id):
 
                         try:
                             print(
-                                f"  🏁 Executando park: lift_z={PAUSE_Z_LIFT_MM:.2f}mm, "
-                                f"park=({PAUSE_PARK_X:.2f},{PAUSE_PARK_Y:.2f})"
+                                f"  🏁 Executando park: retract={PAUSE_RETRACT_MM:.2f}mm, "
+                                f"lift_z={PAUSE_Z_LIFT_MM:.2f}mm, "
+                                f"park=({PAUSE_PARK_X:.2f},{PAUSE_PARK_Y:.2f}), "
+                                f"E_mode={st.last_extrusion_mode}"
                             )
                             send_gcode('G91')
+                            send_gcode(f'G1 E-{PAUSE_RETRACT_MM:.2f} F300')
                             send_gcode(f'G1 Z{PAUSE_Z_LIFT_MM:.2f} F300')
                             send_gcode('G90')
                             send_gcode(f'G0 X{PAUSE_PARK_X:.2f} Y{PAUSE_PARK_Y:.2f} F3000')
@@ -222,6 +225,11 @@ def run_print_job(filepath, original_name, job_id):
                         # fall through para processar esta linha (início do próximo objeto)
 
                 cmd_upper = line.upper()
+
+                if cmd_upper.startswith('M83'):
+                    st.last_extrusion_mode = 'M83'
+                elif cmd_upper.startswith('M82'):
+                    st.last_extrusion_mode = 'M82'
 
                 if cmd_upper.startswith('G28'):
                     if st.g28_executed:

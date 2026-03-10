@@ -51,3 +51,5 @@ _temp_cache_print = {
 }
 
 current_brush = 0
+
+last_extrusion_mode = 'M82'

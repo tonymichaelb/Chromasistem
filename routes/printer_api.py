@@ -426,7 +426,7 @@ def printer_resume():
     target_nozzle = 0
     target_bed = 0
     pause_option = 'keep_temp'
-    pos_x = pos_y = pos_z = None
+    pos_x = pos_y = pos_z = pos_e = None
     state_loaded = False
 
     if st.current_pause_state_job_id:
@@ -434,7 +434,7 @@ def printer_resume():
             conn = sqlite3.connect(DB_NAME)
             cur = conn.cursor()
             cur.execute(
-                'SELECT target_nozzle, target_bed, pause_option, pos_x, pos_y, pos_z FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
+                'SELECT target_nozzle, target_bed, pause_option, pos_x, pos_y, pos_z, pos_e FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
                 (st.current_pause_state_job_id,)
             )
             row = cur.fetchone()
@@ -443,12 +443,12 @@ def printer_resume():
                 target_nozzle = row[0] or 0
                 target_bed = row[1] or 0
                 pause_option = row[2] or 'keep_temp'
-                pos_x, pos_y, pos_z = row[3], row[4], row[5]
+                pos_x, pos_y, pos_z, pos_e = row[3], row[4], row[5], row[6]
                 state_loaded = True
                 print(
                     f"  📋 Estado de pausa carregado do banco "
                     f"(opção={pause_option}, target_nozzle={target_nozzle}, target_bed={target_bed}, "
-                    f"pos=({pos_x},{pos_y},{pos_z}))"
+                    f"pos=({pos_x},{pos_y},{pos_z}), E={pos_e})"
                 )
         except Exception as e:
             print(f"  ⚠️ Erro ao carregar estado de pausa do banco: {e}")
@@ -460,11 +460,12 @@ def printer_resume():
         pos_x = st._pause_mem_state.get('pos_x')
         pos_y = st._pause_mem_state.get('pos_y')
         pos_z = st._pause_mem_state.get('pos_z')
+        pos_e = st._pause_mem_state.get('pos_e')
         state_loaded = True
         print(
             "  📋 Estado de pausa carregado da memória "
             f"(opção={pause_option}, target_nozzle={target_nozzle}, target_bed={target_bed}, "
-            f"pos=({pos_x},{pos_y},{pos_z}))"
+            f"pos=({pos_x},{pos_y},{pos_z}), E={pos_e})"
         )
 
     if state_loaded:
@@ -495,23 +496,25 @@ def printer_resume():
 
         if pos_x is not None and pos_y is not None and pos_z is not None:
             try:
-                try:
-                    cur_pos_before = get_current_position()
-                    print(f"  🧭 Posição atual antes do unpark: {cur_pos_before}")
-                except Exception as cur_e:
-                    print(f"  ⚠️ Erro ao obter posição atual antes do unpark: {cur_e}")
-
+                e_mode = st.last_extrusion_mode
                 print(
-                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f})"
+                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f}), "
+                    f"retract_restore={PAUSE_RETRACT_MM:.2f}mm, E_mode={e_mode}"
                 )
                 printer_send_gcode('G90')
                 printer_send_gcode(f'G0 X{pos_x:.2f} Y{pos_y:.2f} F3000')
                 printer_send_gcode(f'G0 Z{pos_z:.2f} F300')
-                try:
-                    cur_pos_after = get_current_position()
-                    print(f"  🧭 Posição atual após unpark: {cur_pos_after}")
-                except Exception as cur_e2:
-                    print(f"  ⚠️ Erro ao obter posição atual após unpark: {cur_e2}")
+                printer_send_gcode('G91')
+                printer_send_gcode(f'G1 E{PAUSE_RETRACT_MM:.2f} F300')
+                printer_send_gcode('G90')
+
+                printer_send_gcode(e_mode)
+                if pos_e is not None:
+                    printer_send_gcode(f'G92 E{pos_e:.5f}')
+                    print(f"  📐 E restaurado: modo={e_mode}, G92 E{pos_e:.5f}")
+                else:
+                    print(f"  📐 E restaurado: modo={e_mode} (sem pos_e salva)")
+
                 print("  📍 Retorno à posição de impressão (unpark concluído)")
             except Exception as e:
                 print(f"  ⚠️ Erro no unpark: {e}")
