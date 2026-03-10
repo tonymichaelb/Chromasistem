@@ -497,12 +497,16 @@ def printer_resume():
 
         if pos_x is not None and pos_y is not None and pos_z is not None:
             try:
+                e_mode = getattr(st, 'last_extrusion_mode', 'M82')
                 print(
-                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f})"
+                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f}), "
+                    f"E_mode={e_mode}"
                 )
                 printer_send_gcode('G90')
                 printer_send_gcode(f'G0 X{pos_x:.2f} Y{pos_y:.2f} F3000')
                 printer_send_gcode(f'G0 Z{pos_z:.2f} F300')
+                # Restaurar modo de extrusão (M82/M83) igual estava no G-code
+                printer_send_gcode(e_mode)
                 print("  📍 Retorno à posição de impressão (unpark concluído)")
             except Exception as e:
                 print(f"  ⚠️ Erro no unpark: {e}")

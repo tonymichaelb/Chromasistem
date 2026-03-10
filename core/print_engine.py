@@ -230,6 +230,11 @@ def run_print_job(filepath, original_name, job_id):
                         # fall through para processar esta linha (início do próximo objeto)
 
                 cmd_upper = line.upper()
+                if cmd_upper.startswith('M83'):
+                    st.last_extrusion_mode = 'M83'
+                elif cmd_upper.startswith('M82'):
+                    st.last_extrusion_mode = 'M82'
+
                 if cmd_upper.startswith('G28'):
                     if st.g28_executed:
                         print("⏭️  Pulando G28 (já foi executado)")
