@@ -120,11 +120,10 @@ def run_print_job(filepath, original_name, job_id):
 
                         try:
                             print(
-                                f"  🏁 Executando park: retract={PAUSE_RETRACT_MM:.2f}mm, "
-                                f"lift_z={PAUSE_Z_LIFT_MM:.2f}mm, park=({PAUSE_PARK_X:.2f},{PAUSE_PARK_Y:.2f})"
+                                f"  🏁 Executando park: lift_z={PAUSE_Z_LIFT_MM:.2f}mm, "
+                                f"park=({PAUSE_PARK_X:.2f},{PAUSE_PARK_Y:.2f})"
                             )
                             send_gcode('G91')
-                            send_gcode(f'G1 E-{PAUSE_RETRACT_MM:.2f} F300')
                             send_gcode(f'G1 Z{PAUSE_Z_LIFT_MM:.2f} F300')
                             send_gcode('G90')
                             send_gcode(f'G0 X{PAUSE_PARK_X:.2f} Y{PAUSE_PARK_Y:.2f} F3000')

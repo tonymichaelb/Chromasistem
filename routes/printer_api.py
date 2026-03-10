@@ -502,15 +502,11 @@ def printer_resume():
                     print(f"  ⚠️ Erro ao obter posição atual antes do unpark: {cur_e}")
 
                 print(
-                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f}), "
-                    f"retract_restore={PAUSE_RETRACT_MM:.2f}mm"
+                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f})"
                 )
                 printer_send_gcode('G90')
                 printer_send_gcode(f'G0 X{pos_x:.2f} Y{pos_y:.2f} F3000')
                 printer_send_gcode(f'G0 Z{pos_z:.2f} F300')
-                printer_send_gcode('G91')
-                printer_send_gcode(f'G1 E{PAUSE_RETRACT_MM:.2f} F300')
-                printer_send_gcode('G90')
                 try:
                     cur_pos_after = get_current_position()
                     print(f"  🧭 Posição atual após unpark: {cur_pos_after}")

@@ -19,7 +19,9 @@ export function getCurrentStep(
   if (pathname === "/dashboard") {
     if (!connected) return 1
     if (state === "printing" || state === "paused" || state === "failure") return 6
-    return 5
+    // Impressora conectada mas ociosa: continua no passo 1 (Monitor),
+    // só avança de fato quando o usuário seguir o fluxo.
+    return 1
   }
   return 1
 }

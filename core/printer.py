@@ -221,6 +221,8 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                         pass
                     time.sleep(0.01)
 
+                # Log de envio de G-code (sempre que mandamos algo para a impressora)
+                print(f"➡️  GCODE SEND ({timeout:.0f}s): {command.strip()}")
                 st.printer_serial.write(command.encode())
                 st.printer_serial.flush()
 
@@ -232,6 +234,7 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     })
 
                 if not wait_for_ok:
+                    print("⬅️  GCODE RESP (no-wait): ok")
                     return 'ok'
 
                 responses = []
@@ -251,13 +254,19 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
 
                             responses.append(line)
                             if 'ok' in line.lower():
+                                full_resp = '\n'.join(responses)
                                 with history_lock:
                                     commands_history.append({
                                         'time': datetime.now().isoformat(),
-                                        'command': '\n'.join(responses),
+                                        'command': full_resp,
                                         'type': 'response'
                                     })
-                                return '\n'.join(responses)
+                                # Log consolidado da resposta (primeiras ~120 chars)
+                                preview = full_resp.replace('\n', ' | ')
+                                if len(preview) > 120:
+                                    preview = preview[:117] + '...'
+                                print(f"⬅️  GCODE RESP OK: {preview}")
+                                return full_resp
                     else:
                         time.sleep(0.01)
 
@@ -266,7 +275,16 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     time.sleep(0.5)
                     continue
 
-                return '\n'.join(responses) if responses else None
+                if responses:
+                    full_resp = '\n'.join(responses)
+                    preview = full_resp.replace('\n', ' | ')
+                    if len(preview) > 120:
+                        preview = preview[:117] + '...'
+                    print(f"⬅️  GCODE RESP (sem ok): {preview}")
+                    return full_resp
+                else:
+                    print(f"  ⚠️ Nenhuma resposta para '{command.strip()}' (timeout {timeout:.0f}s)")
+                    return None
             except Exception as e:
                 if attempt < retries - 1:
                     print(f"  ⚠️ Erro ao enviar '{command.strip()}': {e}, tentando novamente ({attempt + 2}/{retries})...")
