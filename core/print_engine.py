@@ -74,12 +74,19 @@ def run_print_job(filepath, original_name, job_id):
 
         print(f"  Total de comandos: {total_lines}")
 
+        # Comandos opcionais que muitas firmwares não reconhecem — não enviar para evitar echo "Unknown command"
+        SKIP_COMMANDS = ('M27', 'M73')
+
         with open(filepath, 'r') as f:
             line_count = 0
             lines_sent = 0
             object_counter = 0
 
-            for line in f:
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+
                 if st.print_stopped:
                     print("✗ Impressão PARADA pelo usuário")
                     break
@@ -109,6 +116,7 @@ def run_print_job(filepath, original_name, job_id):
                         option = 'keep_temp' if st.print_paused_by_filament else st.pause_option_requested
                         print(f"  📝 Opção de pausa registrada: {option}")
 
+                        # Salvar posição da peça (antes do park) para retomar exatamente no mesmo lugar
                         st._pause_mem_state['pos_x'] = pos.get('x') if pos else None
                         st._pause_mem_state['pos_y'] = pos.get('y') if pos else None
                         st._pause_mem_state['pos_z'] = pos.get('z') if pos else None
@@ -242,6 +250,10 @@ def run_print_job(filepath, original_name, job_id):
                     print("  🔥 Aquecendo mesa e aguardando temperatura...")
                 elif cmd_upper.startswith('T'):
                     print(f"  🔧 Selecionando extrusora: {line}")
+
+                if any(cmd_upper.startswith(c) for c in SKIP_COMMANDS):
+                    line_count += 1
+                    continue
 
                 response = send_gcode(line, retries=2)
 

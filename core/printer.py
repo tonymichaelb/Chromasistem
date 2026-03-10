@@ -323,13 +323,18 @@ def parse_m105_temps(response):
 
 
 def get_current_position():
-    """Obtém posição atual X,Y,Z,E via M114 (Marlin). Retorna dict com x, y, z, e ou None."""
+    """Obtém posição atual X,Y,Z,E em mm via M114 (Marlin). Retorna dict com x, y, z, e ou None.
+    Ignora 'Count' (steps) para não confundir Z em mm com Z em steps."""
     resp = send_gcode('M114', wait_for_ok=True, timeout=5)
     if not resp:
         return None
+    # Pegar só a parte de posição lógica (até "Count" ou "|"), para não usar Z em steps
+    pos_part = resp.split('Count')[0].split('|')[0].strip()
     out = {}
-    for match in re.finditer(r'([XYZE]):\s*([-\d.]+)', resp, re.IGNORECASE):
-        out[match.group(1).lower()] = float(match.group(2))
+    for match in re.finditer(r'([XYZE]):\s*([-\d.]+)', pos_part, re.IGNORECASE):
+        k = match.group(1).lower()
+        if k not in out:  # primeira ocorrência só (posição em mm)
+            out[k] = float(match.group(2))
     return out if out else None
 
 
@@ -373,18 +378,9 @@ def get_printer_status_serial():
                 print(f"Erro ao parsear temperatura: {e}")
                 print(f"Resposta: {temp_response}")
 
-        progress_response = send_gcode('M27')
-
-        if progress_response and 'SD printing' in progress_response:
-            try:
-                match = re.search(r'(\d+)/(\d+)', progress_response)
-                if match:
-                    current = int(match.group(1))
-                    total = int(match.group(2))
-                    status['progress'] = (current / total) * 100 if total > 0 else 0
-                    status['printing'] = True
-            except Exception as e:
-                print(f"Erro ao parsear progresso: {e}")
+        # M27 (SD print status) não é suportado por muitas firmwares — progresso vem do backend quando imprimindo
+        # progress_response = send_gcode('M27')
+        # if progress_response and 'SD printing' in progress_response: ...
 
         return status
     except Exception as e:
