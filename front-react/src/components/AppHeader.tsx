@@ -13,7 +13,6 @@ import {
   Menu01Icon,
   Cancel01Icon,
   Chemistry01Icon,
-  LayersIcon,
 } from "@hugeicons/core-free-icons";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
