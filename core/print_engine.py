@@ -90,6 +90,7 @@ def run_print_job(filepath, original_name, job_id):
                         target_nozzle = target_bed = 0
                         try:
                             pos = get_current_position()
+                            print(f"  🧭 Estado na pausa — pos: {pos}")
                         except Exception as e:
                             print(f"  ⚠️ Erro ao obter posição (M114): {e}")
                         try:
@@ -106,6 +107,7 @@ def run_print_job(filepath, original_name, job_id):
                             print(f"  ⚠️ Erro ao ler temperaturas (M105): {e}")
 
                         option = 'keep_temp' if st.print_paused_by_filament else st.pause_option_requested
+                        print(f"  📝 Opção de pausa registrada: {option}")
 
                         st._pause_mem_state['pos_x'] = pos.get('x') if pos else None
                         st._pause_mem_state['pos_y'] = pos.get('y') if pos else None
@@ -117,12 +119,16 @@ def run_print_job(filepath, original_name, job_id):
                         st._pause_mem_state['valid'] = True
 
                         try:
+                            print(
+                                f"  🏁 Executando park: retract={PAUSE_RETRACT_MM:.2f}mm, "
+                                f"lift_z={PAUSE_Z_LIFT_MM:.2f}mm, park=({PAUSE_PARK_X:.2f},{PAUSE_PARK_Y:.2f})"
+                            )
                             send_gcode('G91')
                             send_gcode(f'G1 E-{PAUSE_RETRACT_MM:.2f} F300')
                             send_gcode(f'G1 Z{PAUSE_Z_LIFT_MM:.2f} F300')
                             send_gcode('G90')
                             send_gcode(f'G0 X{PAUSE_PARK_X:.2f} Y{PAUSE_PARK_Y:.2f} F3000')
-                            print("  📍 Bico estacionado no canto (park)")
+                            print("  📍 Bico estacionado no canto (park concluído)")
                         except Exception as park_e:
                             print(f"  ⚠️ Erro no park: {park_e}")
 

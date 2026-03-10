@@ -445,7 +445,11 @@ def printer_resume():
                 pause_option = row[2] or 'keep_temp'
                 pos_x, pos_y, pos_z = row[3], row[4], row[5]
                 state_loaded = True
-                print(f"  📋 Estado de pausa carregado do banco (opção: {pause_option})")
+                print(
+                    f"  📋 Estado de pausa carregado do banco "
+                    f"(opção={pause_option}, target_nozzle={target_nozzle}, target_bed={target_bed}, "
+                    f"pos=({pos_x},{pos_y},{pos_z}))"
+                )
         except Exception as e:
             print(f"  ⚠️ Erro ao carregar estado de pausa do banco: {e}")
 
@@ -457,7 +461,11 @@ def printer_resume():
         pos_y = st._pause_mem_state.get('pos_y')
         pos_z = st._pause_mem_state.get('pos_z')
         state_loaded = True
-        print(f"  📋 Estado de pausa carregado da memória (opção: {pause_option})")
+        print(
+            "  📋 Estado de pausa carregado da memória "
+            f"(opção={pause_option}, target_nozzle={target_nozzle}, target_bed={target_bed}, "
+            f"pos=({pos_x},{pos_y},{pos_z}))"
+        )
 
     if state_loaded:
         try:
@@ -487,13 +495,28 @@ def printer_resume():
 
         if pos_x is not None and pos_y is not None and pos_z is not None:
             try:
+                try:
+                    cur_pos_before = get_current_position()
+                    print(f"  🧭 Posição atual antes do unpark: {cur_pos_before}")
+                except Exception as cur_e:
+                    print(f"  ⚠️ Erro ao obter posição atual antes do unpark: {cur_e}")
+
+                print(
+                    f"  🚚 Executando unpark para pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f}), "
+                    f"retract_restore={PAUSE_RETRACT_MM:.2f}mm"
+                )
                 printer_send_gcode('G90')
                 printer_send_gcode(f'G0 X{pos_x:.2f} Y{pos_y:.2f} F3000')
                 printer_send_gcode(f'G0 Z{pos_z:.2f} F300')
                 printer_send_gcode('G91')
                 printer_send_gcode(f'G1 E{PAUSE_RETRACT_MM:.2f} F300')
                 printer_send_gcode('G90')
-                print("  📍 Retorno à posição de impressão (unpark)")
+                try:
+                    cur_pos_after = get_current_position()
+                    print(f"  🧭 Posição atual após unpark: {cur_pos_after}")
+                except Exception as cur_e2:
+                    print(f"  ⚠️ Erro ao obter posição atual após unpark: {cur_e2}")
+                print("  📍 Retorno à posição de impressão (unpark concluído)")
             except Exception as e:
                 print(f"  ⚠️ Erro no unpark: {e}")
     else:
