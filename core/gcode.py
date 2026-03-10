@@ -272,9 +272,11 @@ def parse_gcode_objects_for_bed(gcode_path):
     Ignora "; LAYER" para não criar objetos espúrios.
     Retorna lista com bounding box em mm (min_x, min_y, max_x, max_y) por objeto.
     """
-    objects = []
-    current = None
-    obj_id = 0
+    # Agrupa por objeto lógico (nome/id/copy) em vez de criar um objeto novo
+    # a cada "; printing object" em cada layer.
+    objects_by_key = {}
+    current_key = None
+    next_sequential_id = 0
     try:
         with open(gcode_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
@@ -283,28 +285,49 @@ def parse_gcode_objects_for_bed(gcode_path):
                 if not raw_lower.startswith(';'):
                     pass
                 elif 'stop printing object' in raw_lower:
-                    if current is not None and current.get('min_x') is not None:
-                        objects.append(current)
-                    current = None
+                    current_key = None
                     continue
                 elif 'printing object' in raw_lower and 'stop' not in raw_lower:
-                    if current is not None and current.get('min_x') is not None:
-                        objects.append(current)
-                    obj_id += 1
+                    # Exemplo Orca: "; printing object Cubo id:18 copy 0"
                     name = None
-                    m = re.search(r'object[:\s]+(.+?)(?:\s*$|\s*;)', raw_lower, re.I)
-                    if m:
-                        name = m.group(1).strip().strip(';').strip() or None
-                    current = {
-                        'id': obj_id - 1,
-                        'name': name,
-                        'min_x': None,
-                        'min_y': None,
-                        'max_x': None,
-                        'max_y': None,
-                    }
+                    obj_num = None
+                    copy_num = None
+                    # nome após "object"
+                    m_name = re.search(r'printing object\s+(.+?)(?:\s+id:|\s*$)', raw_lower, re.I)
+                    if m_name:
+                        name = m_name.group(1).strip().strip(';').strip() or None
+                    # id:<n>
+                    m_id = re.search(r'id:(\d+)', raw_lower)
+                    if m_id:
+                        try:
+                            obj_num = int(m_id.group(1))
+                        except ValueError:
+                            obj_num = None
+                    # copy <n>
+                    m_copy = re.search(r'copy\s+(\d+)', raw_lower)
+                    if m_copy:
+                        try:
+                            copy_num = int(m_copy.group(1))
+                        except ValueError:
+                            copy_num = None
+
+                    key = (name or '', obj_num, copy_num)
+                    if key not in objects_by_key:
+                        objects_by_key[key] = {
+                            'id': next_sequential_id,
+                            'name': name,
+                            'min_x': None,
+                            'min_y': None,
+                            'max_x': None,
+                            'max_y': None,
+                        }
+                        next_sequential_id += 1
+                    current_key = key
                     continue
 
+                if current_key is None:
+                    continue
+                current = objects_by_key.get(current_key)
                 if current is None:
                     continue
                 cmd = line.split(';')[0].strip().upper()
@@ -320,11 +343,14 @@ def parse_gcode_objects_for_bed(gcode_path):
                 if y is not None:
                     current['min_y'] = y if current['min_y'] is None else min(current['min_y'], y)
                     current['max_y'] = y if current['max_y'] is None else max(current['max_y'], y)
-        if current is not None and current.get('min_x') is not None:
-            objects.append(current)
     except Exception as e:
         print(f"⚠️ Erro ao parsear objetos do G-code: {e}")
-    return objects
+    # Filtra somente objetos que realmente receberam coordenadas
+    result = []
+    for obj in objects_by_key.values():
+        if obj.get('min_x') is not None:
+            result.append(obj)
+    return result
 
 
 def parse_gcode_metadata(gcode_path):
