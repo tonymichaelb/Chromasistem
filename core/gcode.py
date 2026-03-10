@@ -280,7 +280,9 @@ def parse_gcode_objects_for_bed(gcode_path):
       anterior, abrimos uma nova ilha.
     - Cada ilha vira um objeto com bounding box (min_x, min_y, max_x, max_y).
     """
-    # Distância mínima em mm para considerar que começou outra peça
+    # Distância mínima em mm para considerar que começou outra peça.
+    # Usamos um valor relativamente grande para separar cubos/peças
+    # espalhados na mesa, mesmo olhando o arquivo inteiro (todas layers).
     DIST_THRESHOLD_MM = 25.0
 
     objects = []
@@ -288,18 +290,12 @@ def parse_gcode_objects_for_bed(gcode_path):
     last_extrude_pos = None  # (x, y) do último ponto extrudado
     last_x = None
     last_y = None
-    saw_extrusion = False
 
     try:
         with open(gcode_path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 raw = line.strip()
                 low = raw.lower()
-
-                # Depois que já começamos a extrudar, se chegar em LAYER_CHANGE,
-                # paramos – só precisamos da geometria da primeira layer.
-                if saw_extrusion and low.startswith(";layer_change"):
-                    break
 
                 if low.startswith(";"):
                     continue
@@ -331,7 +327,6 @@ def parse_gcode_objects_for_bed(gcode_path):
                 if not is_extrude:
                     continue
 
-                saw_extrusion = True
                 x = last_x
                 y = last_y
 

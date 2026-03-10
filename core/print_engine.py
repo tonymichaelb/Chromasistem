@@ -218,6 +218,9 @@ def run_print_job(filepath, original_name, job_id):
                         if 'object' in raw_lower or 'layer' in raw_lower:
                             st.skip_requested = False
                             print("  ⏭️ Fim do skip; continuando no próximo objeto/camada")
+                            e_mode = getattr(st, 'last_extrusion_mode', 'M82')
+                            send_gcode(e_mode, retries=2)
+                            print(f"  📍 Modo de extrusão restaurado: {e_mode}")
                         line_count += 1
                         continue
                     current_index = object_counter - 1
@@ -227,6 +230,11 @@ def run_print_job(filepath, original_name, job_id):
                     if current_index > skip_id:
                         st.skip_requested = False
                         print(f"  ⏭️ Fim do skip do objeto {skip_id}; continuando no objeto {current_index}")
+                        # Restaurar modo de extrusão (M82/M83) antes de enviar o próximo objeto,
+                        # igual no resume — evita extrusora travada ao pular item
+                        e_mode = getattr(st, 'last_extrusion_mode', 'M82')
+                        send_gcode(e_mode, retries=2)
+                        print(f"  📍 Modo de extrusão restaurado: {e_mode}")
                         # fall through para processar esta linha (início do próximo objeto)
 
                 cmd_upper = line.upper()
