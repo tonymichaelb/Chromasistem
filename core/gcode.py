@@ -267,89 +267,105 @@ def extract_thumbnail(gcode_path, file_id):
 
 def parse_gcode_objects_for_bed(gcode_path):
     """
-    Percorre o G-code e extrai objetos (blocos entre marcadores de objeto).
-    Usa apenas marcadores "; printing object" / "; stop printing object" (Orca/Prusa).
-    Ignora "; LAYER" para não criar objetos espúrios.
-    Retorna lista com bounding box em mm (min_x, min_y, max_x, max_y) por objeto.
+    Extrai um bounding box por PEÇA FÍSICA na mesa, pensando no uso de
+    "pular item com defeito".
+
+    Em vez de confiar apenas em comentários "; printing object", usamos
+    a primeira camada de extrusão:
+
+    - Consideramos apenas blocos entre
+      "; printing object ..." e "; stop printing object ...".
+    - Limitamos a análise apenas até o primeiro ";LAYER_CHANGE" depois
+      de começarmos a ver esses blocos (primeira layer).
+    - Cada bloco dessa primeira layer vira um "objeto" independente.
     """
-    # Agrupa por objeto lógico (nome/id/copy) em vez de criar um objeto novo
-    # a cada "; printing object" em cada layer.
-    objects_by_key = {}
-    current_key = None
-    next_sequential_id = 0
+    segments = []
+    current = None
+    current_name = None
+    started = False  # já vimos algum "printing object"
+
     try:
-        with open(gcode_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(gcode_path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 raw = line.strip()
-                raw_lower = raw.lower()
-                if not raw_lower.startswith(';'):
-                    pass
-                elif 'stop printing object' in raw_lower:
-                    current_key = None
-                    continue
-                elif 'printing object' in raw_lower and 'stop' not in raw_lower:
-                    # Exemplo Orca: "; printing object Cubo id:18 copy 0"
-                    name = None
-                    obj_num = None
-                    copy_num = None
-                    # nome após "object"
-                    m_name = re.search(r'printing object\s+(.+?)(?:\s+id:|\s*$)', raw_lower, re.I)
-                    if m_name:
-                        name = m_name.group(1).strip().strip(';').strip() or None
-                    # id:<n>
-                    m_id = re.search(r'id:(\d+)', raw_lower)
-                    if m_id:
-                        try:
-                            obj_num = int(m_id.group(1))
-                        except ValueError:
-                            obj_num = None
-                    # copy <n>
-                    m_copy = re.search(r'copy\s+(\d+)', raw_lower)
-                    if m_copy:
-                        try:
-                            copy_num = int(m_copy.group(1))
-                        except ValueError:
-                            copy_num = None
+                low = raw.lower()
 
-                    key = (name or '', obj_num, copy_num)
-                    if key not in objects_by_key:
-                        objects_by_key[key] = {
-                            'id': next_sequential_id,
-                            'name': name,
-                            'min_x': None,
-                            'min_y': None,
-                            'max_x': None,
-                            'max_y': None,
+                # Se já começamos a ver objetos e chegamos em uma mudança de layer,
+                # paramos – só usamos a geometria da primeira layer.
+                if started and low.startswith(";layer_change"):
+                    break
+
+                if low.startswith(";"):
+                    if "stop printing object" in low:
+                        if current is not None and current.get("min_x") is not None:
+                            segments.append({"name": current_name, **current})
+                        current = None
+                        current_name = None
+                        continue
+                    if "printing object" in low and "stop" not in low:
+                        started = True
+                        if current is not None and current.get("min_x") is not None:
+                            segments.append({"name": current_name, **current})
+                        m_name = re.search(
+                            r"printing object\s+(.+?)(?:\s+id:|\s*$)", raw, re.I
+                        )
+                        current_name = (
+                            m_name.group(1).strip().strip(";").strip()
+                            if m_name
+                            else None
+                        )
+                        current = {
+                            "min_x": None,
+                            "min_y": None,
+                            "max_x": None,
+                            "max_y": None,
                         }
-                        next_sequential_id += 1
-                    current_key = key
-                    continue
+                        continue
 
-                if current_key is None:
-                    continue
-                current = objects_by_key.get(current_key)
                 if current is None:
                     continue
-                cmd = line.split(';')[0].strip().upper()
-                if not cmd or (not cmd.startswith('G0') and not cmd.startswith('G1')):
+
+                cmd = line.split(";", 1)[0].strip().upper()
+                if not cmd or (not cmd.startswith("G0") and not cmd.startswith("G1")):
                     continue
-                x_m = re.search(r'\bX([-\d.]+)', line, re.I)
-                y_m = re.search(r'\bY([-\d.]+)', line, re.I)
+
+                x_m = re.search(r"\bX([-\d.]+)", cmd, re.I)
+                y_m = re.search(r"\bY([-\d.]+)", cmd, re.I)
                 x = float(x_m.group(1)) if x_m else None
                 y = float(y_m.group(1)) if y_m else None
                 if x is not None:
-                    current['min_x'] = x if current['min_x'] is None else min(current['min_x'], x)
-                    current['max_x'] = x if current['max_x'] is None else max(current['max_x'], x)
+                    current["min_x"] = (
+                        x if current["min_x"] is None else min(current["min_x"], x)
+                    )
+                    current["max_x"] = (
+                        x if current["max_x"] is None else max(current["max_x"], x)
+                    )
                 if y is not None:
-                    current['min_y'] = y if current['min_y'] is None else min(current['min_y'], y)
-                    current['max_y'] = y if current['max_y'] is None else max(current['max_y'], y)
+                    current["min_y"] = (
+                        y if current["min_y"] is None else min(current["min_y"], y)
+                    )
+                    current["max_y"] = (
+                        y if current["max_y"] is None else max(current["max_y"], y)
+                    )
+
+        if current is not None and current.get("min_x") is not None:
+            segments.append({"name": current_name, **current})
     except Exception as e:
         print(f"⚠️ Erro ao parsear objetos do G-code: {e}")
-    # Filtra somente objetos que realmente receberam coordenadas
+        return []
+
     result = []
-    for obj in objects_by_key.values():
-        if obj.get('min_x') is not None:
-            result.append(obj)
+    for idx, seg in enumerate(segments):
+        result.append(
+            {
+                "id": idx,
+                "name": seg.get("name") or f"Objeto {idx + 1}",
+                "min_x": seg["min_x"],
+                "min_y": seg["min_y"],
+                "max_x": seg["max_x"],
+                "max_y": seg["max_y"],
+            }
+        )
     return result
 
 

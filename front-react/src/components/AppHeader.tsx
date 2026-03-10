@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Button } from "@/components/ui/button"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { useState, useEffect, useRef } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   LogoutIcon,
   File01Icon,
@@ -14,79 +14,91 @@ import {
   Cancel01Icon,
   Chemistry01Icon,
   LayersIcon,
-} from "@hugeicons/core-free-icons"
-import { useAuth } from "@/contexts/AuthContext"
-import { usePrinterStatus } from "@/hooks/usePrinterStatus"
-import { PrintFlowStepper } from "@/components/PrintFlowStepper"
+} from "@hugeicons/core-free-icons";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePrinterStatus } from "@/hooks/usePrinterStatus";
+import { PrintFlowStepper } from "@/components/PrintFlowStepper";
 
-const THEME_STORAGE_KEY = "croma-theme"
+const THEME_STORAGE_KEY = "croma-theme";
 
-type Theme = "light" | "dark"
+type Theme = "light" | "dark";
 
 function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-  const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null
-  if (stored === "dark" || stored === "light") return stored
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  if (typeof window === "undefined") return "light";
+  const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+  if (stored === "dark" || stored === "light") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 function applyTheme(theme: Theme) {
-  const root = document.documentElement
-  if (theme === "dark") root.classList.add("dark")
-  else root.classList.remove("dark")
+  const root = document.documentElement;
+  if (theme === "dark") root.classList.add("dark");
+  else root.classList.remove("dark");
 }
 
 export interface AppHeaderProps {
-  username?: string
-  onLogout?: () => void
+  username?: string;
+  onLogout?: () => void;
 }
 
-export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: AppHeaderProps) {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { username: usernameContext, setUsername } = useAuth()
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const headerRef = useRef<HTMLElement>(null)
+export function AppHeader({
+  username: usernameProp,
+  onLogout: onLogoutProp,
+}: AppHeaderProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { username: usernameContext, setUsername } = useAuth();
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
 
-  const username = usernameProp ?? usernameContext ?? ""
+  const username = usernameProp ?? usernameContext ?? "";
   const onLogout =
     onLogoutProp ??
     (() => {
-      setUsername(null)
-      fetch("/api/logout", { method: "POST", credentials: "include" }).then(() =>
-        navigate("/login")
-      )
-    })
+      setUsername(null);
+      fetch("/api/logout", { method: "POST", credentials: "include" }).then(
+        () => navigate("/login"),
+      );
+    });
 
   useEffect(() => {
-    applyTheme(theme)
-    localStorage.setItem(THEME_STORAGE_KEY, theme)
-  }, [theme])
+    applyTheme(theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
-  const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"))
+  const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
-        setMobileMenuOpen(false)
+        setMobileMenuOpen(false);
       }
-    }
+    };
     if (mobileMenuOpen) {
-      document.body.style.overflow = "hidden"
-      document.addEventListener("click", handleClickOutside, true)
+      document.body.style.overflow = "hidden";
+      document.addEventListener("click", handleClickOutside, true);
     }
     return () => {
-      document.body.style.overflow = ""
-      document.removeEventListener("click", handleClickOutside, true)
-    }
-  }, [mobileMenuOpen])
+      document.body.style.overflow = "";
+      document.removeEventListener("click", handleClickOutside, true);
+    };
+  }, [mobileMenuOpen]);
 
-  const PRINT_FLOW_ROUTES = ["/dashboard", "/files", "/revisao", "/terminal", "/colorir", "/mistura"]
-  const { state: printerState } = usePrinterStatus()
-  const isPrinting = printerState === "printing"
+  const PRINT_FLOW_ROUTES = [
+    "/dashboard",
+    "/files",
+    "/revisao",
+    "/terminal",
+    "/colorir",
+    "/mistura",
+  ];
+  const { state: printerState } = usePrinterStatus();
+  const isPrinting = printerState === "printing";
   const showPrintFlowStepper =
-    PRINT_FLOW_ROUTES.includes(location.pathname) && !isPrinting
+    PRINT_FLOW_ROUTES.includes(location.pathname) && !isPrinting;
 
   // Ordem do header igual ao fluxo: Monitor → Arquivos → Terminal → Cores (Colorir, Mistura) → depois Fatiador e Wi-Fi
   const navLinks = [
@@ -95,12 +107,14 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
     { to: "/terminal", label: "Terminal", icon: ComputerTerminal01Icon },
     { to: "/colorir", label: "Colorir", icon: PaintBoardIcon },
     { to: "/mistura", label: "Mistura", icon: Chemistry01Icon },
-    { to: "/fatiador", label: "Fatiador", icon: LayersIcon },
     { to: "/wifi", label: "Wi-Fi", icon: WifiIcon },
-  ]
+  ];
 
   return (
-    <header ref={headerRef} className="sticky top-0 z-40 border-b border-border bg-background">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-40 border-b border-border bg-background"
+    >
       <div className="flex h-14 items-center justify-between gap-2 px-3 sm:px-4 md:px-6">
         <Link to="/dashboard" className="flex shrink-0 items-center gap-2">
           <img
@@ -120,7 +134,11 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
                 size="sm"
               >
                 {Icon && (
-                  <HugeiconsIcon icon={Icon} strokeWidth={2} className="size-4" />
+                  <HugeiconsIcon
+                    icon={Icon}
+                    strokeWidth={2}
+                    className="size-4"
+                  />
                 )}
                 {label}
               </Button>
@@ -133,7 +151,9 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
+            aria-label={
+              theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"
+            }
           >
             <HugeiconsIcon
               icon={theme === "light" ? MoonIcon : SunIcon}
@@ -143,12 +163,22 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
           </Button>
           {(usernameProp !== undefined || usernameContext !== null) && (
             <span className="hidden text-sm text-muted-foreground lg:inline">
-              Bem-vindo, <strong className="text-foreground">{username || "…"}</strong>
+              Bem-vindo,{" "}
+              <strong className="text-foreground">{username || "…"}</strong>
             </span>
           )}
           {onLogout && (
-            <Button variant="secondary" size="sm" onClick={onLogout} className="hidden md:inline-flex">
-              <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} className="size-4" />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onLogout}
+              className="hidden md:inline-flex"
+            >
+              <HugeiconsIcon
+                icon={LogoutIcon}
+                strokeWidth={2}
+                className="size-4"
+              />
               Sair
             </Button>
           )}
@@ -194,7 +224,11 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
                   className="w-full justify-start"
                 >
                   {Icon && (
-                    <HugeiconsIcon icon={Icon} strokeWidth={2} className="size-4" />
+                    <HugeiconsIcon
+                      icon={Icon}
+                      strokeWidth={2}
+                      className="size-4"
+                    />
                   )}
                   {label}
                 </Button>
@@ -204,7 +238,8 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
           <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
             {(usernameProp !== undefined || usernameContext !== null) && (
               <p className="text-sm text-muted-foreground">
-                Bem-vindo, <strong className="text-foreground">{username || "…"}</strong>
+                Bem-vindo,{" "}
+                <strong className="text-foreground">{username || "…"}</strong>
               </p>
             )}
             {onLogout && (
@@ -212,11 +247,15 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
                 variant="secondary"
                 className="w-full justify-center md:hidden"
                 onClick={() => {
-                  setMobileMenuOpen(false)
-                  onLogout()
+                  setMobileMenuOpen(false);
+                  onLogout();
                 }}
               >
-                <HugeiconsIcon icon={LogoutIcon} strokeWidth={2} className="size-4" />
+                <HugeiconsIcon
+                  icon={LogoutIcon}
+                  strokeWidth={2}
+                  className="size-4"
+                />
                 Sair
               </Button>
             )}
@@ -224,5 +263,5 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
         </div>
       )}
     </header>
-  )
+  );
 }
