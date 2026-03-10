@@ -11,7 +11,7 @@ const PlaceholderLayout = ({ title }: { title: string }) => (
     <AppHeader />
     <div className="flex flex-col items-center justify-center gap-4 p-4 sm:p-8">
       <p className="text-muted-foreground">{title}</p>
-      <Link to="/dashboard" className="text-primary underline">Voltar ao Dashboard</Link>
+      <Link to="/dashboard" className="text-primary underline">Voltar ao Monitor</Link>
     </div>
   </div>
 )

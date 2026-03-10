@@ -16,6 +16,8 @@ import {
   LayersIcon,
 } from "@hugeicons/core-free-icons"
 import { useAuth } from "@/contexts/AuthContext"
+import { usePrinterStatus } from "@/hooks/usePrinterStatus"
+import { PrintFlowStepper } from "@/components/PrintFlowStepper"
 
 const THEME_STORAGE_KEY = "croma-theme"
 
@@ -80,13 +82,20 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
     }
   }, [mobileMenuOpen])
 
+  const PRINT_FLOW_ROUTES = ["/dashboard", "/files", "/revisao", "/terminal", "/colorir", "/mistura"]
+  const { state: printerState } = usePrinterStatus()
+  const isPrinting = printerState === "printing"
+  const showPrintFlowStepper =
+    PRINT_FLOW_ROUTES.includes(location.pathname) && !isPrinting
+
+  // Ordem do header igual ao fluxo: Monitor → Arquivos → Terminal → Cores (Colorir, Mistura) → depois Fatiador e Wi-Fi
   const navLinks = [
-    { to: "/dashboard", label: "Dashboard" },
+    { to: "/dashboard", label: "Monitor" },
     { to: "/files", label: "Arquivos", icon: File01Icon },
-    { to: "/fatiador", label: "Fatiador", icon: LayersIcon },
     { to: "/terminal", label: "Terminal", icon: ComputerTerminal01Icon },
     { to: "/colorir", label: "Colorir", icon: PaintBoardIcon },
     { to: "/mistura", label: "Mistura", icon: Chemistry01Icon },
+    { to: "/fatiador", label: "Fatiador", icon: LayersIcon },
     { to: "/wifi", label: "Wi-Fi", icon: WifiIcon },
   ]
 
@@ -159,6 +168,14 @@ export function AppHeader({ username: usernameProp, onLogout: onLogoutProp }: Ap
           </Button>
         </div>
       </div>
+
+      {showPrintFlowStepper && (
+        <div className="px-3 sm:px-4 md:px-6 pb-4">
+          <div className="mx-auto max-w-[1180px]">
+            <PrintFlowStepper />
+          </div>
+        </div>
+      )}
 
       {/* Mobile menu drawer */}
       {mobileMenuOpen && (

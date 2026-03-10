@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AppHeader } from "@/components/AppHeader"
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
 import { useTerminal } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -344,6 +345,8 @@ export function Terminal() {
             </CardContent>
           </Card>
         </div>
+
+        <PrintFlowAdvance />
       </main>
     </div>
   )

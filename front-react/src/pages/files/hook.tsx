@@ -176,6 +176,7 @@ export function useFiles() {
     setSearchTerm,
     uploading,
     notification,
+    showNotification,
     fileInputRef,
     handleFileSelect,
     uploadFile,

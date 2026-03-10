@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AppHeader } from "@/components/AppHeader"
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
 import { useColorir, type CmyMix } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -196,6 +197,8 @@ export function Colorir() {
             </div>
           </CardContent>
         </Card>
+
+        <PrintFlowAdvance />
       </main>
 
       {/* Botão de ajuda flutuante */}

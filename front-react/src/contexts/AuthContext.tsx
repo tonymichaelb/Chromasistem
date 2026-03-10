@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react"
 import { useLocation } from "react-router-dom"
 
-const AUTH_ROUTES = ["/dashboard", "/files", "/terminal", "/colorir", "/mistura", "/wifi"]
+const AUTH_ROUTES = ["/dashboard", "/files", "/revisao", "/terminal", "/colorir", "/mistura", "/wifi"]
 
 interface AuthContextValue {
   username: string | null

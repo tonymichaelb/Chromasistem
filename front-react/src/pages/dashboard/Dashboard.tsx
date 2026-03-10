@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { AppHeader } from "@/components/AppHeader"
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
 import { useDashboard, type PauseOption } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -385,6 +386,8 @@ export function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <PrintFlowAdvance />
       </main>
 
       {/* Modal de opções de pausa */}

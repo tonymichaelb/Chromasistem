@@ -19,6 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AppHeader } from "@/components/AppHeader"
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
+import { useSelectedPrintFile } from "@/contexts/SelectedPrintFileContext"
 import { cn } from "@/lib/utils"
 import { useFiles, type GcodeFileItem } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
@@ -29,6 +31,7 @@ import {
   Download01Icon,
   RefreshIcon,
   Copy01Icon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons"
 
 const ACCEPT_FILES = ".gcode,.gco,.g"
@@ -52,11 +55,13 @@ function FileCard({
   onPrint,
   onDownload,
   onDelete,
+  onSelectForPrint,
 }: {
   file: GcodeFileItem
   onPrint: () => void
   onDownload: () => void
   onDelete: () => void
+  onSelectForPrint?: () => void
 }) {
   const meta: string[] = []
   if (file.print_time) meta.push(`⏱️ ${file.print_time}`)
@@ -110,6 +115,12 @@ function FileCard({
         </div>
       </div>
       <div className="flex shrink-0 flex-row flex-wrap gap-2 sm:flex-col sm:gap-1 [&_button]:min-h-10 [&_button]:touch-manipulation [&_button]:flex-1 sm:[&_button]:flex-none">
+        {onSelectForPrint && (
+          <Button size="sm" variant="secondary" onClick={onSelectForPrint} title="Usar na Revisão e imprimir">
+            <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />
+            Selecionar para impressão
+          </Button>
+        )}
         <Button size="sm" onClick={onPrint}>
           <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-4" />
           Imprimir
@@ -135,6 +146,7 @@ export function Files() {
     setSearchTerm,
     uploading,
     notification,
+    showNotification,
     fileInputRef,
     handleFileSelect,
     uploadFile,
@@ -153,7 +165,13 @@ export function Files() {
     copyUploadUrl,
   } = useFiles()
 
+  const { setSelectedFile } = useSelectedPrintFile()
   const [dragOver, setDragOver] = useState(false)
+
+  const handleSelectForPrint = (file: GcodeFileItem) => {
+    setSelectedFile(file)
+    showNotification("Arquivo selecionado. Avance para Revisão.", "success")
+  }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -260,6 +278,7 @@ export function Files() {
                     onPrint={() => openPrintConfirm(file.id, file.name)}
                     onDownload={() => downloadFile(file.id)}
                     onDelete={() => openDeleteConfirm(file.id)}
+                    onSelectForPrint={() => handleSelectForPrint(file)}
                   />
                 ))}
               </div>
@@ -312,6 +331,8 @@ export function Files() {
             </div>
           </CardContent>
         </Card>
+
+        <PrintFlowAdvance />
       </main>
 
       {/* Confirmação excluir */}

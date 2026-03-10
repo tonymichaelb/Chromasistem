@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AppHeader } from "@/components/AppHeader"
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
 import { useMistura } from "./hook"
 
@@ -169,6 +170,8 @@ export function Mistura() {
             {notification.message}
           </div>
         )}
+
+        <PrintFlowAdvance />
       </main>
     </div>
   )
