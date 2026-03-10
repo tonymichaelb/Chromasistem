@@ -1,19 +1,16 @@
 """File management API routes."""
 
 from flask import Blueprint, request, jsonify, session, send_from_directory
-import sqlite3
 import os
-
-# Timeout para evitar "database is locked" quando outro request está usando o DB (ex.: upload)
-SQLITE_TIMEOUT = 15
 import time
 import shutil
 import threading
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
+from core.database import get_db
 from core.config import (
-    DB_NAME, GCODE_FOLDER, SLICER_TEMP_FOLDER,
+    GCODE_FOLDER, SLICER_TEMP_FOLDER,
     app as flask_app,
 )
 from core.printer import connect_printer, send_gcode as printer_send_gcode
@@ -32,7 +29,7 @@ def list_files():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, original_name, file_size, uploaded_at, last_printed, print_count, filename, thumbnail_path,
@@ -98,7 +95,7 @@ def upload_file():
         file.save(filepath)
         file_info = get_gcode_info(filepath)
 
-        conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO gcode_files (user_id, filename, original_name, file_size)
@@ -112,7 +109,7 @@ def upload_file():
         thumbnail_path = extract_thumbnail(filepath, file_id)
         metadata = parse_gcode_metadata(filepath)
 
-        conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+        conn = get_db()
         cursor = conn.cursor()
         if thumbnail_path:
             cursor.execute('UPDATE gcode_files SET thumbnail_path = ? WHERE id = ?',
@@ -232,7 +229,7 @@ def slicer_slice():
         return jsonify({'success': False, 'message': f'Erro ao copiar G-code: {str(e)}'}), 500
 
     file_info = get_gcode_info(gcode_dest)
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO gcode_files (user_id, filename, original_name, file_size)
@@ -290,7 +287,7 @@ def delete_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute('SELECT filename FROM gcode_files WHERE id = ? AND user_id = ?',
@@ -323,7 +320,7 @@ def print_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute('SELECT filename, original_name FROM gcode_files WHERE id = ? AND user_id = ?',
@@ -388,7 +385,7 @@ def download_file(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT filename, original_name FROM gcode_files WHERE id = ? AND user_id = ?',
                    (file_id, session['user_id']))
@@ -409,7 +406,7 @@ def preview_gcode(file_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME, timeout=SQLITE_TIMEOUT)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT filename FROM gcode_files WHERE id = ? AND user_id = ?',
                    (file_id, session['user_id']))

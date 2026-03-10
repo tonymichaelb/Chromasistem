@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const fetchOptions = { credentials: "include" as RequestCredentials }
 const BRUSH_COUNT = 19
@@ -112,6 +113,7 @@ function saveJson(key: string, value: unknown) {
 
 export function useColorir() {
   const navigate = useNavigate()
+  const { exec } = usePrinterCommand()
   const [currentBrushIndex, setCurrentBrushIndex] = useState<number | null>(null)
   const [brushCustomColors, setBrushCustomColors] = useState<Record<number, string>>(() =>
     loadJson(STORAGE_KEYS.brushCustomColors, {})
@@ -262,18 +264,20 @@ export function useColorir() {
         `Pincel ${index + 1} selecionado! Clique em uma tinta abaixo para aplicar.`,
         "success"
       )
-      try {
-        await api("/api/printer/select-brush", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brush: index }),
-        })
-        await sendMixtureForBrush(index, mix)
-      } catch {
-        showNotification("Comando T pode não ter sido enviado", "info")
-      }
+      await exec(`Selecionando Pincel ${index + 1}…`, async () => {
+        try {
+          await api("/api/printer/select-brush", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ brush: index }),
+          })
+          await sendMixtureForBrush(index, mix)
+        } catch {
+          showNotification("Comando T pode não ter sido enviado", "info")
+        }
+      })
     },
-    [brushMixtures, api, sendMixtureForBrush, showNotification]
+    [brushMixtures, api, sendMixtureForBrush, showNotification, exec]
   )
 
   const applyTintaToBrush = useCallback(
@@ -282,17 +286,19 @@ export function useColorir() {
         showNotification("Primeiro escolha um pincel acima.", "error")
         return
       }
-      const tintaColor = tintaCustomColors[tintaIndex] ?? TINTA_DEFAULT_COLORS[tintaIndex]
-      const tintaMixture = brushMixtures[tintaIndex] ?? defaultMixture()
-      const newBrushColors = { ...brushCustomColors, [currentBrushIndex]: tintaColor }
-      const newMixtures = { ...brushMixtures, [currentBrushIndex]: tintaMixture }
-      setBrushCustomColors(newBrushColors)
-      setBrushMixtures(newMixtures)
-      saveJson(STORAGE_KEYS.brushCustomColors, newBrushColors)
-      saveJson(STORAGE_KEYS.brushMixtures, newMixtures)
-      await sendMixtureForBrush(currentBrushIndex, tintaMixture)
-      await saveToServer(newMixtures, newBrushColors, tintaCustomColors)
-      showNotification(`Pincel ${currentBrushIndex + 1} agora tem a cor da Tinta ${tintaIndex + 1}!`, "success")
+      await exec(`Aplicando Tinta ${tintaIndex + 1}…`, async () => {
+        const tintaColor = tintaCustomColors[tintaIndex] ?? TINTA_DEFAULT_COLORS[tintaIndex]
+        const tintaMixture = brushMixtures[tintaIndex] ?? defaultMixture()
+        const newBrushColors = { ...brushCustomColors, [currentBrushIndex]: tintaColor }
+        const newMixtures = { ...brushMixtures, [currentBrushIndex]: tintaMixture }
+        setBrushCustomColors(newBrushColors)
+        setBrushMixtures(newMixtures)
+        saveJson(STORAGE_KEYS.brushCustomColors, newBrushColors)
+        saveJson(STORAGE_KEYS.brushMixtures, newMixtures)
+        await sendMixtureForBrush(currentBrushIndex, tintaMixture)
+        await saveToServer(newMixtures, newBrushColors, tintaCustomColors)
+        showNotification(`Pincel ${currentBrushIndex + 1} agora tem a cor da Tinta ${tintaIndex + 1}!`, "success")
+      })
     },
     [
       currentBrushIndex,
@@ -302,6 +308,7 @@ export function useColorir() {
       sendMixtureForBrush,
       saveToServer,
       showNotification,
+      exec,
     ]
   )
 

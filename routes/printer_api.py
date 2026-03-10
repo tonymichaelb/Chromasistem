@@ -7,8 +7,9 @@ import time
 import os
 from datetime import datetime
 
+from core.database import get_db
 from core.config import (
-    DB_NAME, GCODE_FOLDER, PAUSE_RETRACT_MM,
+    GCODE_FOLDER, PAUSE_RETRACT_MM,
     BED_WIDTH_MM, BED_DEPTH_MM, TEMP_REHEAT_MARGIN,
     TEMP_CHECK_INTERVAL_PRINT_SEC, commands_history, history_lock,
     FILAMENT_SENSOR_MODE, FILAMENT_CHECK_INTERVAL_SEC,
@@ -35,7 +36,7 @@ def printer_status():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT pj.id, pj.filename, pj.progress, pj.started_at, gf.print_time
@@ -220,7 +221,7 @@ def printer_failure():
     st.print_paused = True
     print(f"⚠️ Falha detectada: {message}" + (f" (código: {code})" if code else ""))
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cur = conn.cursor()
         cur.execute(
             'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
@@ -245,7 +246,7 @@ def printer_failure_resolve():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cur = conn.cursor()
         cur.execute(
             'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
@@ -292,7 +293,7 @@ def printer_skip_object():
     st.print_paused = False
 
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cur = conn.cursor()
         cur.execute(
             'SELECT id FROM print_jobs WHERE status = ? ORDER BY started_at DESC LIMIT 1',
@@ -320,7 +321,7 @@ def printer_failure_history():
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
     limit = min(int(request.args.get('limit', 50)), 100)
     print_job_id = request.args.get('print_job_id')
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     if print_job_id:
@@ -355,7 +356,7 @@ def printer_bed_preview():
     """Retorna dimensões da mesa e lista de objetos do G-code atual (para visualização e escolher peça a pular)."""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT pj.filename
@@ -431,7 +432,7 @@ def printer_resume():
 
     if st.current_pause_state_job_id:
         try:
-            conn = sqlite3.connect(DB_NAME)
+            conn = get_db()
             cur = conn.cursor()
             cur.execute(
                 'SELECT target_nozzle, target_bed, pause_option, pos_x, pos_y, pos_z, pos_e FROM print_pause_state WHERE print_job_id = ? ORDER BY id DESC LIMIT 1',
@@ -562,7 +563,7 @@ def printer_stop():
     st.current_failure_code = None
     st._pause_mem_state['valid'] = False
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE print_jobs 
@@ -732,7 +733,7 @@ def save_brush_mixtures():
         colors = data.get('colors', {})
         tintaColors = data.get('tintaColors', {})
 
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cursor = conn.cursor()
 
         for brush_index, mixture in mixtures.items():
@@ -765,7 +766,7 @@ def load_brush_mixtures():
 
     try:
         try:
-            conn = sqlite3.connect(DB_NAME)
+            conn = get_db()
             cursor = conn.cursor()
             cursor.execute("SELECT brush_id, a_percent, b_percent, c_percent, custom_color, tinta_color FROM brush_mixtures")
             rows = cursor.fetchall()

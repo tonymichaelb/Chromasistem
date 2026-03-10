@@ -2,10 +2,10 @@
 
 from flask import (Blueprint, render_template, session, redirect,
                    send_from_directory, abort)
-import sqlite3
 import os
 
-from core.config import DB_NAME, REACT_DIST, USE_REACT_APP
+from core.database import get_db
+from core.config import REACT_DIST, USE_REACT_APP
 
 pages_bp = Blueprint('pages', __name__)
 
@@ -32,7 +32,7 @@ def login():
     r = _serve_react_index()
     if r is not None:
         return r
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM users')
     user_count = cursor.fetchone()[0]
@@ -46,7 +46,7 @@ def register():
     r = _serve_react_index()
     if r is not None:
         return r
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM users')
     user_count = cursor.fetchone()[0]
@@ -66,7 +66,7 @@ def dashboard():
     if 'user_id' not in session:
         return redirect('/login')
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, original_name, file_size, uploaded_at, print_count, thumbnail_path,
@@ -126,7 +126,7 @@ def viewer(filename=None):
 
     file_id = None
     if filename:
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id FROM gcode_files 
@@ -140,7 +140,7 @@ def viewer(filename=None):
             print(f"✓ Arquivo '{filename}' encontrado com ID: {file_id}")
         else:
             print(f"✗ Arquivo '{filename}' NÃO encontrado para user_id={session['user_id']}")
-            conn = sqlite3.connect(DB_NAME)
+            conn = get_db()
             cursor = conn.cursor()
             cursor.execute('SELECT id, original_name FROM gcode_files WHERE user_id = ?', (session['user_id'],))
             all_files = cursor.fetchall()

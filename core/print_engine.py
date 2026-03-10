@@ -1,14 +1,14 @@
 """Print engine: thread function that sends G-code to the printer line by line."""
 
-import sqlite3
 import re
 import time
 from datetime import datetime
 
 from core.config import (
-    DB_NAME, PAUSE_RETRACT_MM, PAUSE_Z_LIFT_MM,
+    PAUSE_RETRACT_MM, PAUSE_Z_LIFT_MM,
     PAUSE_PARK_X, PAUSE_PARK_Y,
 )
+from core.database import get_db
 from core.printer import send_gcode, connect_printer, check_printer_ready, get_current_position
 from core.filament import check_filament_sensor
 import core.state as st
@@ -17,7 +17,7 @@ import core.state as st
 def _log_failure_to_db(job_id, code, message):
     """Registra falha detectada automaticamente na tabela print_failure_log."""
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = get_db()
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO print_failure_log (print_job_id, failure_code, failure_message, action)
@@ -46,7 +46,7 @@ def run_print_job(filepath, original_name, job_id):
 
         if not check_printer_ready():
             print("✗ Impressão cancelada: impressora não está respondendo")
-            conn_local = sqlite3.connect(DB_NAME)
+            conn_local = get_db()
             cursor_local = conn_local.cursor()
             cursor_local.execute('''
                 UPDATE print_jobs 
@@ -150,7 +150,7 @@ def run_print_job(filepath, original_name, job_id):
 
                         try:
                             file_offset = f.tell()
-                            conn_pause = sqlite3.connect(DB_NAME)
+                            conn_pause = get_db()
                             cur_pause = conn_pause.cursor()
                             cur_pause.execute('''
                                 INSERT INTO print_pause_state
@@ -282,7 +282,7 @@ def run_print_job(filepath, original_name, job_id):
 
                 if lines_sent % 50 == 0:
                     progress = (lines_sent / total_lines) * 100
-                    conn_local = sqlite3.connect(DB_NAME)
+                    conn_local = get_db()
                     cursor_local = conn_local.cursor()
                     cursor_local.execute('''
                         UPDATE print_jobs 
@@ -293,7 +293,7 @@ def run_print_job(filepath, original_name, job_id):
                     conn_local.close()
                     print(f"  Progresso: {progress:.1f}% ({lines_sent}/{total_lines})")
 
-        conn_local = sqlite3.connect(DB_NAME)
+        conn_local = get_db()
         cursor_local = conn_local.cursor()
 
         cursor_local.execute('SELECT started_at FROM print_jobs WHERE id = ?', (job_id,))
@@ -340,7 +340,7 @@ def run_print_job(filepath, original_name, job_id):
     except Exception as e:
         print(f"✗ Erro durante impressão: {e}")
         try:
-            conn_local = sqlite3.connect(DB_NAME)
+            conn_local = get_db()
             cursor_local = conn_local.cursor()
             cursor_local.execute('''
                 UPDATE print_jobs 

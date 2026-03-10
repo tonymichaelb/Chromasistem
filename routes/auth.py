@@ -2,9 +2,8 @@
 
 from flask import Blueprint, request, jsonify, session
 import sqlite3
-
-from core.config import DB_NAME, get_app_version
-from core.database import hash_password
+from core.config import get_app_version
+from core.database import hash_password, get_db
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -18,7 +17,7 @@ def api_login():
     if not username or not password:
         return jsonify({'success': False, 'message': 'Usuário e senha são obrigatórios'}), 400
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT id, username, password FROM users WHERE username = ?', (username,))
     user = cursor.fetchone()
@@ -44,7 +43,7 @@ def api_register():
     if len(password) < 6:
         return jsonify({'success': False, 'message': 'A senha deve ter pelo menos 6 caracteres'}), 400
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute('SELECT COUNT(*) FROM users')

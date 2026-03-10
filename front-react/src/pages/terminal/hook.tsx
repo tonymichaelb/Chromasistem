@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const STATUS_POLL_MS = 5000
 const HISTORY_POLL_MS = 1000
@@ -23,6 +24,7 @@ interface CommandHistoryItem {
 
 export function useTerminal() {
   const navigate = useNavigate()
+  const { exec } = usePrinterCommand()
   const [nozzleInput, setNozzleInput] = useState("210")
   const [bedInput, setBedInput] = useState("60")
   const [currentNozzle, setCurrentNozzle] = useState<number | null>(null)
@@ -139,68 +141,85 @@ export function useTerminal() {
     async (temp?: number) => {
       const value = temp ?? parseInt(nozzleInput, 10)
       if (Number.isNaN(value)) return
-      await sendGcodeCommand(`M104 S${value}`)
-      showNotification(`Bico: ${value}°C`, "success")
+      await exec(`Enviando M104 S${value}…`, async () => {
+        await sendGcodeCommand(`M104 S${value}`)
+        showNotification(`Bico: ${value}°C`, "success")
+      })
     },
-    [nozzleInput, sendGcodeCommand, showNotification]
+    [nozzleInput, sendGcodeCommand, showNotification, exec]
   )
 
   const setBedTemp = useCallback(
     async (temp?: number) => {
       const value = temp ?? parseInt(bedInput, 10)
       if (Number.isNaN(value)) return
-      await sendGcodeCommand(`M140 S${value}`)
-      showNotification(`Mesa: ${value}°C`, "success")
+      await exec(`Enviando M140 S${value}…`, async () => {
+        await sendGcodeCommand(`M140 S${value}`)
+        showNotification(`Mesa: ${value}°C`, "success")
+      })
     },
-    [bedInput, sendGcodeCommand, showNotification]
+    [bedInput, sendGcodeCommand, showNotification, exec]
   )
 
   const setPreset = useCallback(
     async (nozzle: number, bed: number) => {
-      await sendGcodeCommand(`M104 S${nozzle}`)
-      await sendGcodeCommand(`M140 S${bed}`)
-      showNotification(`Preset: Bico ${nozzle}°C, Mesa ${bed}°C`, "success")
+      await exec(`Preset: Bico ${nozzle}°C, Mesa ${bed}°C…`, async () => {
+        await sendGcodeCommand(`M104 S${nozzle}`)
+        await sendGcodeCommand(`M140 S${bed}`)
+        showNotification(`Preset: Bico ${nozzle}°C, Mesa ${bed}°C`, "success")
+      })
     },
-    [sendGcodeCommand, showNotification]
+    [sendGcodeCommand, showNotification, exec]
   )
 
   const jogAxis = useCallback(
     async (axis: string, distance: number) => {
-      await sendGcodeCommand("G91")
-      await sendGcodeCommand(`G0 ${axis}${distance} F3000`)
-      await sendGcodeCommand("G90")
-      showNotification(`Moveu ${axis} ${distance}mm`, "info")
+      await exec(`Movendo ${axis} ${distance}mm…`, async () => {
+        await sendGcodeCommand("G91")
+        await sendGcodeCommand(`G0 ${axis}${distance} F3000`)
+        await sendGcodeCommand("G90")
+        showNotification(`Moveu ${axis} ${distance}mm`, "info")
+      })
     },
-    [sendGcodeCommand, showNotification]
+    [sendGcodeCommand, showNotification, exec]
   )
 
   const homeAxis = useCallback(
     async (axis: string) => {
-      await sendGcodeCommand(`G28 ${axis}`)
-      showNotification(`Home ${axis}`, "success")
+      await exec(`Home ${axis}…`, async () => {
+        await sendGcodeCommand(`G28 ${axis}`)
+        showNotification(`Home ${axis}`, "success")
+      })
     },
-    [sendGcodeCommand, showNotification]
+    [sendGcodeCommand, showNotification, exec]
   )
 
   const homeAll = useCallback(async () => {
-    await sendGcodeCommand("G28")
-    showNotification("Home All concluído", "success")
-  }, [sendGcodeCommand, showNotification])
+    await exec("Home All…", async () => {
+      await sendGcodeCommand("G28")
+      showNotification("Home All concluído", "success")
+    })
+  }, [sendGcodeCommand, showNotification, exec])
 
   const extrudeFilament = useCallback(
     async (distance: number) => {
-      await sendGcodeCommand("G91")
-      await sendGcodeCommand(`G1 E${distance} F300`)
-      await sendGcodeCommand("G90")
-      showNotification(distance > 0 ? `Extrudou ${distance}mm` : `Retraiu ${Math.abs(distance)}mm`, "info")
+      const label = distance > 0 ? `Extrudando ${distance}mm…` : `Retraindo ${Math.abs(distance)}mm…`
+      await exec(label, async () => {
+        await sendGcodeCommand("G91")
+        await sendGcodeCommand(`G1 E${distance} F300`)
+        await sendGcodeCommand("G90")
+        showNotification(distance > 0 ? `Extrudou ${distance}mm` : `Retraiu ${Math.abs(distance)}mm`, "info")
+      })
     },
-    [sendGcodeCommand, showNotification]
+    [sendGcodeCommand, showNotification, exec]
   )
 
   const preheatExtruder = useCallback(async () => {
-    await sendGcodeCommand("M104 S210")
-    showNotification("Pre-aquecendo extrusora para 210°C", "success")
-  }, [sendGcodeCommand, showNotification])
+    await exec("Pre-aquecendo extrusora…", async () => {
+      await sendGcodeCommand("M104 S210")
+      showNotification("Pre-aquecendo extrusora para 210°C", "success")
+    })
+  }, [sendGcodeCommand, showNotification, exec])
 
   const syncHistoryCount = useCallback(async () => {
     try {
@@ -215,16 +234,18 @@ export function useTerminal() {
   const sendGcode = useCallback(
     async (command: string) => {
       if (!command.trim()) return
-      setTerminalLines((prev) => [...prev, { text: `> ${command}`, type: "command" }])
-      const result = await sendGcodeCommand(command)
-      if (result.success && result.response != null) {
-        setTerminalLines((prev) => [...prev, { text: `< ${result.response}`, type: "output" }])
-      } else if (!result.success) {
-        setTerminalLines((prev) => [...prev, { text: `! ${result.response ?? "Sem resposta"}`, type: "error" }])
-      }
-      await syncHistoryCount()
+      await exec(`Enviando: ${command}`, async () => {
+        setTerminalLines((prev) => [...prev, { text: `> ${command}`, type: "command" }])
+        const result = await sendGcodeCommand(command)
+        if (result.success && result.response != null) {
+          setTerminalLines((prev) => [...prev, { text: `< ${result.response}`, type: "output" }])
+        } else if (!result.success) {
+          setTerminalLines((prev) => [...prev, { text: `! ${result.response ?? "Sem resposta"}`, type: "error" }])
+        }
+        await syncHistoryCount()
+      })
     },
-    [sendGcodeCommand, syncHistoryCount]
+    [sendGcodeCommand, syncHistoryCount, exec]
   )
 
   const clearTerminal = useCallback(() => {
@@ -233,16 +254,18 @@ export function useTerminal() {
 
   const quickCommand = useCallback(
     async (cmd: string) => {
-      setTerminalLines((prev) => [...prev, { text: `> ${cmd}`, type: "command" }])
-      const result = await sendGcodeCommand(cmd)
-      if (result.success && result.response != null) {
-        setTerminalLines((prev) => [...prev, { text: `< ${result.response}`, type: "output" }])
-      } else if (!result.success) {
-        setTerminalLines((prev) => [...prev, { text: `! ${result.response ?? "Sem resposta"}`, type: "error" }])
-      }
-      await syncHistoryCount()
+      await exec(`Enviando: ${cmd}`, async () => {
+        setTerminalLines((prev) => [...prev, { text: `> ${cmd}`, type: "command" }])
+        const result = await sendGcodeCommand(cmd)
+        if (result.success && result.response != null) {
+          setTerminalLines((prev) => [...prev, { text: `< ${result.response}`, type: "output" }])
+        } else if (!result.success) {
+          setTerminalLines((prev) => [...prev, { text: `! ${result.response ?? "Sem resposta"}`, type: "error" }])
+        }
+        await syncHistoryCount()
+      })
     },
-    [sendGcodeCommand, syncHistoryCount]
+    [sendGcodeCommand, syncHistoryCount, exec]
   )
 
   return {

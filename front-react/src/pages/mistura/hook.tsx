@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
+import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const fetchOptions = { credentials: "include" as RequestCredentials }
 
@@ -97,6 +98,7 @@ function distributePercentages(
 
 export function useMistura() {
   const navigate = useNavigate()
+  const { exec } = usePrinterCommand()
   const [mix, setMix] = useState<CmyMix>(defaultMix)
   const [suggestColorHex, setSuggestColorHex] = useState("#808080")
   const [notification, setNotification] = useState<{
@@ -124,32 +126,34 @@ export function useMistura() {
   const sendMixture = useCallback(async () => {
     const sum = mix.a + mix.b + mix.c
     if (sum !== 100) return
-    setSending(true)
-    try {
-      const res = await fetch("/api/printer/send-mixture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          command: `M182 A${mix.a} B${mix.b} C${mix.c}`,
-        }),
-        ...fetchOptions,
-      })
-      if (res.status === 401) {
-        navigate("/login")
-        return
+    await exec(`Enviando mistura M182…`, async () => {
+      setSending(true)
+      try {
+        const res = await fetch("/api/printer/send-mixture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: `M182 A${mix.a} B${mix.b} C${mix.c}`,
+          }),
+          ...fetchOptions,
+        })
+        if (res.status === 401) {
+          navigate("/login")
+          return
+        }
+        const data = await res.json()
+        if (data.success) {
+          showNotification(`Mistura enviada: M182 A${mix.a} B${mix.b} C${mix.c}`, "success")
+        } else {
+          showNotification(data.message ?? "Erro ao enviar", "error")
+        }
+      } catch {
+        showNotification("Erro ao enviar mistura", "error")
+      } finally {
+        setSending(false)
       }
-      const data = await res.json()
-      if (data.success) {
-        showNotification(`Mistura enviada: M182 A${mix.a} B${mix.b} C${mix.c}`, "success")
-      } else {
-        showNotification(data.message ?? "Erro ao enviar", "error")
-      }
-    } catch (err) {
-      showNotification("Erro ao enviar mistura", "error")
-    } finally {
-      setSending(false)
-    }
-  }, [mix, navigate, showNotification])
+    })
+  }, [mix, navigate, showNotification, exec])
 
   const sum = mix.a + mix.b + mix.c
   const isValid = sum === 100

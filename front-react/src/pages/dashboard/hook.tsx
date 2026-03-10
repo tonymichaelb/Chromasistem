@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
+import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const STATUS_POLL_MS = 3000
 const MAX_UNAUTHORIZED_RETRIES = 2
@@ -66,6 +67,7 @@ export interface FailureHistoryEntry {
 export function useDashboard() {
   const navigate = useNavigate()
   const { username } = useAuth()
+  const { exec } = usePrinterCommand()
   const [status, setStatus] = useState<PrinterStatus | null>(null)
   const [recentFiles, setRecentFiles] = useState<GcodeFile[]>([])
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null)
@@ -136,30 +138,34 @@ export function useDashboard() {
   }, [fetchStatus])
 
   const connect = async () => {
-    setConnectLoading(true)
-    try {
-      const res = await fetch("/api/printer/connect", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Conectado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao conectar impressora", "error")
-    } finally {
-      setConnectLoading(false)
-    }
+    await exec("Conectando à impressora…", async () => {
+      setConnectLoading(true)
+      try {
+        const res = await fetch("/api/printer/connect", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Conectado", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao conectar impressora", "error")
+      } finally {
+        setConnectLoading(false)
+      }
+    })
   }
 
   const openDisconnectConfirm = () => setDisconnectConfirmOpen(true)
   const confirmDisconnect = async () => {
     setDisconnectConfirmOpen(false)
-    try {
-      const res = await fetch("/api/printer/disconnect", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Desconectado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao desconectar impressora", "error")
-    }
+    await exec("Desconectando impressora…", async () => {
+      try {
+        const res = await fetch("/api/printer/disconnect", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Desconectado", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao desconectar impressora", "error")
+      }
+    })
   }
 
   const startPrint = async () => {
@@ -183,43 +189,49 @@ export function useDashboard() {
 
   const confirmPause = async () => {
     closePauseModal()
-    try {
-      const res = await fetch("/api/printer/pause", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ option: pauseOption }),
-        ...fetchOptions,
-      })
-      const data = await res.json()
-      showNotification(data.message || "Pausado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao pausar impressão", "error")
-    }
+    await exec("Pausando impressão…", async () => {
+      try {
+        const res = await fetch("/api/printer/pause", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ option: pauseOption }),
+          ...fetchOptions,
+        })
+        const data = await res.json()
+        showNotification(data.message || "Pausado", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao pausar impressão", "error")
+      }
+    })
   }
 
   const resume = async () => {
-    try {
-      const res = await fetch("/api/printer/resume", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Retomado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao retomar impressão", "error")
-    }
+    await exec("Retomando impressão…", async () => {
+      try {
+        const res = await fetch("/api/printer/resume", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Retomado", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao retomar impressão", "error")
+      }
+    })
   }
 
   const openStopConfirm = () => setStopConfirmOpen(true)
   const confirmStop = async () => {
     setStopConfirmOpen(false)
-    try {
-      const res = await fetch("/api/printer/stop", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Parado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao parar impressão", "error")
-    }
+    await exec("Parando impressão…", async () => {
+      try {
+        const res = await fetch("/api/printer/stop", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Parado", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao parar impressão", "error")
+      }
+    })
   }
 
   const openPrintConfirm = (fileId: number, fileName: string) =>
@@ -228,20 +240,22 @@ export function useDashboard() {
     const payload = printConfirm
     setPrintConfirm(null)
     if (!payload) return
-    try {
-      const res = await fetch(`/api/files/print/${payload.fileId}`, {
-        method: "POST",
-        ...fetchOptions,
-      })
-      const data = await res.json()
-      showNotification(data.message || "Impressão iniciada", data.success ? "success" : "error")
-      if (data.success) {
-        fetchStatus()
-        setTimeout(() => fetchRecentFiles(), 2000)
+    await exec("Iniciando impressão…", async () => {
+      try {
+        const res = await fetch(`/api/files/print/${payload.fileId}`, {
+          method: "POST",
+          ...fetchOptions,
+        })
+        const data = await res.json()
+        showNotification(data.message || "Impressão iniciada", data.success ? "success" : "error")
+        if (data.success) {
+          fetchStatus()
+          setTimeout(() => fetchRecentFiles(), 2000)
+        }
+      } catch {
+        showNotification("Erro ao iniciar impressão", "error")
       }
-    } catch {
-      showNotification("Erro ao iniciar impressão", "error")
-    }
+    })
   }
 
   const logout = async () => {
@@ -270,44 +284,50 @@ export function useDashboard() {
             : "Parado"
 
   const failureResolve = async () => {
-    try {
-      const res = await fetch("/api/printer/failure/resolve", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Aguardando problema resolvido", data.success ? "success" : "error")
-    } catch {
-      showNotification("Erro ao registrar ação", "error")
-    }
+    await exec("Registrando resolução…", async () => {
+      try {
+        const res = await fetch("/api/printer/failure/resolve", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Aguardando problema resolvido", data.success ? "success" : "error")
+      } catch {
+        showNotification("Erro ao registrar ação", "error")
+      }
+    })
   }
 
   const failureResolved = async () => {
-    try {
-      const res = await fetch("/api/printer/failure/resolved", { method: "POST", ...fetchOptions })
-      const data = await res.json()
-      showNotification(data.message || "Retomando impressão", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
-    } catch {
-      showNotification("Erro ao retomar impressão", "error")
-    }
+    await exec("Retomando após resolução…", async () => {
+      try {
+        const res = await fetch("/api/printer/failure/resolved", { method: "POST", ...fetchOptions })
+        const data = await res.json()
+        showNotification(data.message || "Retomando impressão", data.success ? "success" : "error")
+        if (data.success) fetchStatus()
+      } catch {
+        showNotification("Erro ao retomar impressão", "error")
+      }
+    })
   }
 
   const skipObject = async (objectId?: number) => {
-    try {
-      const res = await fetch("/api/printer/skip-object", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(objectId != null ? { object_id: objectId } : {}),
-        ...fetchOptions,
-      })
-      const data = await res.json()
-      showNotification(data.message || "Pulando item", data.success ? "success" : "error")
-      if (data.success) {
-        fetchStatus()
-        setBedPreviewOpen(false)
-        setSelectedObjectId(null)
+    await exec("Pulando objeto…", async () => {
+      try {
+        const res = await fetch("/api/printer/skip-object", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(objectId != null ? { object_id: objectId } : {}),
+          ...fetchOptions,
+        })
+        const data = await res.json()
+        showNotification(data.message || "Pulando item", data.success ? "success" : "error")
+        if (data.success) {
+          fetchStatus()
+          setBedPreviewOpen(false)
+          setSelectedObjectId(null)
+        }
+      } catch {
+        showNotification("Erro ao pular item", "error")
       }
-    } catch {
-      showNotification("Erro ao pular item", "error")
-    }
+    })
   }
 
   const fetchFailureHistory = useCallback(async () => {

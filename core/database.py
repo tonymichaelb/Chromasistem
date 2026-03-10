@@ -9,8 +9,17 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+def get_db():
+    """Return a sqlite3 connection with WAL mode and busy_timeout already set."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute('PRAGMA busy_timeout=5000')
+    return conn
+
+
 def init_db():
     conn = sqlite3.connect(DB_NAME)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (

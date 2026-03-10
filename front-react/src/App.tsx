@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { SelectedPrintFileProvider } from "@/contexts/SelectedPrintFileContext"
+import { PrinterCommandProvider } from "@/contexts/PrinterCommandContext"
 import { Login } from "@/pages/login/Login"
 import { Register } from "@/pages/register/Register"
 import { Dashboard } from "@/pages/dashboard/Dashboard"
@@ -16,6 +17,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+      <PrinterCommandProvider>
       <SelectedPrintFileProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -32,6 +34,7 @@ function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
       </SelectedPrintFileProvider>
+      </PrinterCommandProvider>
       </AuthProvider>
     </BrowserRouter>
   )
