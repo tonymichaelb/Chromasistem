@@ -15,9 +15,11 @@ export function PrintFlowAdvance() {
   const { connected, state } = usePrinterStatus()
   const currentStep = getCurrentStep(location.pathname, connected, state)
   const nextStep = currentStep < 5 ? PRINT_FLOW_STEPS[currentStep] : null
-  const prevStep = currentStep > 1 ? PRINT_FLOW_STEPS[currentStep - 2] : null
+  const prevStep = currentStep > 1 && currentStep !== 6 ? PRINT_FLOW_STEPS[currentStep - 2] : null
   const canAdvance = nextStep && (currentStep === 1 ? connected : true)
 
+  // No passo 6 (Monitor com impressora imprimindo) não exibir barra (sem Voltar nem Avançar)
+  if (currentStep === 6) return null
   if (!nextStep && !prevStep) return null
 
   const containerClass = cn(

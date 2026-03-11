@@ -470,13 +470,20 @@ export function Dashboard() {
                       strokeWidth={0.5}
                     />
                     {bedPreviewData.objects.map((obj) => {
-                      const minX = obj.min_x ?? 0
-                      const minY = obj.min_y ?? 0
-                      const maxX = obj.max_x ?? minX
-                      const maxY = obj.max_y ?? minY
-                      const w = maxX - minX || 1
-                      const h = maxY - minY || 1
+                      const widthMm = bedPreviewData.bed.width_mm
                       const depthMm = bedPreviewData.bed.depth_mm
+                      let minX = obj.min_x ?? 0
+                      let minY = obj.min_y ?? 0
+                      let maxX = obj.max_x ?? minX
+                      let maxY = obj.max_y ?? minY
+                      minX = Math.max(0, Math.min(minX, widthMm))
+                      maxX = Math.max(0, Math.min(maxX, widthMm))
+                      minY = Math.max(0, Math.min(minY, depthMm))
+                      maxY = Math.max(0, Math.min(maxY, depthMm))
+                      if (maxX <= minX) maxX = minX + 5
+                      if (maxY <= minY) maxY = minY + 5
+                      const w = maxX - minX
+                      const h = maxY - minY
                       const svgY = depthMm - maxY
                       const selected = selectedObjectId === obj.id
                       return (

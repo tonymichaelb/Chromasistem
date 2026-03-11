@@ -269,13 +269,12 @@ def parse_gcode_objects_for_bed(gcode_path):
     """
     Extrai um bounding box por PEÇA FÍSICA na mesa (preview e "pular item com defeito").
 
-    Usa só a PRIMEIRA CAMADA: analisa G-code até o primeiro ";LAYER_CHANGE" após
-    a primeira extrusão. Dentro dessa região, agrupa pontos de extrusão (G1 com E>0)
-    em "ilhas": quando a distância ao último ponto extrudado passa de
-    DIST_THRESHOLD_MM, inicia nova ilha. Cada ilha = uma peça física = um bbox.
-    Assim temos 3 peças = 3 bboxes separados e uma área de clique por peça.
+    Usa só a PRIMEIRA CAMADA; agrupa pontos de extrusão em "ilhas" por distância.
+    Bboxes degenerados (um único ponto: min==max) são expandidos para um quadrado
+    mínimo no preview, senão não aparecem na tela.
     """
     DIST_THRESHOLD_MM = 25.0
+    DEGENERATE_MARGIN_MM = 5.0  # se min==max, expandir para quadrado visível
 
     objects = []
     current = None
@@ -347,14 +346,22 @@ def parse_gcode_objects_for_bed(gcode_path):
     for idx, obj in enumerate(objects):
         if obj.get("min_x") is None:
             continue
+        min_x, max_x = obj["min_x"], obj["max_x"]
+        min_y, max_y = obj["min_y"], obj["max_y"]
+        if min_x == max_x:
+            min_x -= DEGENERATE_MARGIN_MM / 2
+            max_x += DEGENERATE_MARGIN_MM / 2
+        if min_y == max_y:
+            min_y -= DEGENERATE_MARGIN_MM / 2
+            max_y += DEGENERATE_MARGIN_MM / 2
         result.append(
             {
                 "id": idx,
                 "name": f"Objeto {idx + 1}",
-                "min_x": obj["min_x"],
-                "min_y": obj["min_y"],
-                "max_x": obj["max_x"],
-                "max_y": obj["max_y"],
+                "min_x": min_x,
+                "min_y": min_y,
+                "max_x": max_x,
+                "max_y": max_y,
             }
         )
     return result

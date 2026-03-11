@@ -384,13 +384,26 @@ def printer_bed_preview():
     objects = parse_gcode_objects_for_bed(filepath)
     out = []
     for o in objects:
+        min_x = o.get('min_x')
+        min_y = o.get('min_y')
+        max_x = o.get('max_x')
+        max_y = o.get('max_y')
+        if min_x is not None and max_x is not None and min_y is not None and max_y is not None:
+            min_x = max(0.0, min(min_x, BED_WIDTH_MM))
+            max_x = max(0.0, min(max_x, BED_WIDTH_MM))
+            min_y = max(0.0, min(min_y, BED_DEPTH_MM))
+            max_y = max(0.0, min(max_y, BED_DEPTH_MM))
+            if min_x >= max_x:
+                max_x = min_x + 5.0
+            if min_y >= max_y:
+                max_y = min_y + 5.0
         out.append({
             'id': o['id'],
             'name': o.get('name'),
-            'min_x': round(o['min_x'], 2) if o.get('min_x') is not None else None,
-            'min_y': round(o['min_y'], 2) if o.get('min_y') is not None else None,
-            'max_x': round(o['max_x'], 2) if o.get('max_x') is not None else None,
-            'max_y': round(o['max_y'], 2) if o.get('max_y') is not None else None,
+            'min_x': round(min_x, 2) if min_x is not None else None,
+            'min_y': round(min_y, 2) if min_y is not None else None,
+            'max_x': round(max_x, 2) if max_x is not None else None,
+            'max_y': round(max_y, 2) if max_y is not None else None,
         })
     return jsonify({
         'success': True,

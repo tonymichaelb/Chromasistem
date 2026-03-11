@@ -46,6 +46,7 @@ export function Revisao() {
     openPrintConfirm,
     closePrintConfirm,
     confirmPrint,
+    waitingForPrintStart,
   } = useRevisao();
 
   return (
@@ -292,6 +293,23 @@ export function Revisao() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Overlay bloqueante: aguardar impressora iniciar (homing etc.) antes de ir ao Monitor */}
+      {waitingForPrintStart && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-border bg-background p-8 shadow-2xl">
+            <div className="relative flex h-12 w-12 items-center justify-center">
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-muted border-t-primary" />
+            </div>
+            <p className="text-center text-sm font-medium text-foreground">
+              Aguarde, iniciando impressão…
+            </p>
+            <p className="text-center text-xs text-muted-foreground">
+              Não clique em nada. Você será levado ao Monitor quando a impressora começar a executar.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
