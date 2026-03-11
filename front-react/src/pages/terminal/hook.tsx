@@ -1,10 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
+import { usePrinterStatusContext } from "@/contexts/PrinterStatusContext"
 
-const STATUS_POLL_MS = 5000
-const STATUS_RETRIES_ON_ERROR = 3
-const STATUS_RETRY_DELAY_MS = 1000
 const HISTORY_POLL_MS = 1000
 const TEMP_HISTORY_MAX = 50
 
@@ -27,6 +25,7 @@ interface CommandHistoryItem {
 export function useTerminal() {
   const navigate = useNavigate()
   const { exec } = usePrinterCommand()
+  const { status } = usePrinterStatusContext()
   const [nozzleInput, setNozzleInput] = useState("210")
   const [bedInput, setBedInput] = useState("60")
   const [currentNozzle, setCurrentNozzle] = useState<number | null>(null)
@@ -68,39 +67,6 @@ export function useTerminal() {
     [navigate]
   )
 
-  const fetchStatus = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch("/api/printer/status", fetchOptions)
-      if (res.status === 401) {
-        navigate("/login")
-        return true
-      }
-      const data = await res.json()
-      if (!data.success || !data.status) return false
-      const t = data.status.temperature
-      setCurrentNozzle(t.nozzle ?? null)
-      setCurrentBed(t.bed ?? null)
-      setTargetNozzle(t.target_nozzle ?? null)
-      setTargetBed(t.target_bed ?? null)
-      setTempHistory((prev) => {
-        const next = [
-          ...prev,
-          {
-            time: new Date().toLocaleTimeString("pt-BR"),
-            nozzle: t.nozzle ?? 0,
-            bed: t.bed ?? 0,
-            targetNozzle: t.target_nozzle ?? 0,
-            targetBed: t.target_bed ?? 0,
-          },
-        ]
-        return next.slice(-TEMP_HISTORY_MAX)
-      })
-      return true
-    } catch {
-      return false
-    }
-  }, [navigate])
-
   const fetchCommandsHistory = useCallback(async () => {
     try {
       const res = await fetch("/api/printer/commands-history", fetchOptions)
@@ -129,34 +95,26 @@ export function useTerminal() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    let timeoutId: ReturnType<typeof setTimeout>
-    const scheduleNext = () => {
-      if (cancelled) return
-      timeoutId = setTimeout(() => {
-        runWithRetries()
-      }, STATUS_POLL_MS)
-    }
-    const runWithRetries = async () => {
-      if (cancelled) return
-      let attempt = 0
-      while (attempt <= STATUS_RETRIES_ON_ERROR) {
-        const ok = await fetchStatus()
-        if (cancelled) return
-        if (ok) break
-        attempt++
-        if (attempt <= STATUS_RETRIES_ON_ERROR) {
-          await new Promise((r) => setTimeout(r, STATUS_RETRY_DELAY_MS))
-        }
-      }
-      scheduleNext()
-    }
-    runWithRetries()
-    return () => {
-      cancelled = true
-      clearTimeout(timeoutId)
-    }
-  }, [fetchStatus])
+    const t = status?.temperature
+    if (!t) return
+    setCurrentNozzle(t.nozzle ?? null)
+    setCurrentBed(t.bed ?? null)
+    setTargetNozzle(t.target_nozzle ?? null)
+    setTargetBed(t.target_bed ?? null)
+    setTempHistory((prev) => {
+      const next = [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString("pt-BR"),
+          nozzle: t.nozzle ?? 0,
+          bed: t.bed ?? 0,
+          targetNozzle: t.target_nozzle ?? 0,
+          targetBed: t.target_bed ?? 0,
+        },
+      ]
+      return next.slice(-TEMP_HISTORY_MAX)
+    })
+  }, [status])
 
   useEffect(() => {
     fetchCommandsHistory()

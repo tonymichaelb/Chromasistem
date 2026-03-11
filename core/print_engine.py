@@ -39,6 +39,7 @@ def run_print_job(filepath, original_name, job_id):
         st.g28_executed = False
         st.g29_executed = False
         st.current_pause_state_job_id = None
+        st.current_print_object_index = None
         st._consecutive_cmd_failures = 0
         pause_state_saved_this_pause = False
 
@@ -207,6 +208,7 @@ def run_print_job(filepath, original_name, job_id):
 
                 if raw_lower.startswith(';') and 'printing object' in raw_lower and 'stop' not in raw_lower:
                     object_counter += 1
+                    st.current_print_object_index = object_counter - 1
 
                 if not line:
                     line_count += 1
@@ -369,3 +371,4 @@ def run_print_job(filepath, original_name, job_id):
             pass
     finally:
         st.printing_in_progress = False
+        st.current_print_object_index = None

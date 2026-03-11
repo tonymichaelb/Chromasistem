@@ -368,7 +368,7 @@ def printer_bed_preview():
     row = cursor.fetchone()
     if not row:
         conn.close()
-        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': [], 'current_object_index': None})
     original_name = row[0]
     cursor.execute(
         'SELECT filename FROM gcode_files WHERE original_name = ? AND user_id = ?',
@@ -377,10 +377,10 @@ def printer_bed_preview():
     file_row = cursor.fetchone()
     conn.close()
     if not file_row:
-        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': [], 'current_object_index': None})
     filepath = os.path.join(flask_app.config['GCODE_FOLDER'], file_row[0])
     if not os.path.isfile(filepath):
-        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': []})
+        return jsonify({'success': True, 'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM}, 'objects': [], 'current_object_index': None})
     objects = parse_gcode_objects_for_bed(filepath)
     out = []
     for o in objects:
@@ -405,10 +405,12 @@ def printer_bed_preview():
             'max_x': round(max_x, 2) if max_x is not None else None,
             'max_y': round(max_y, 2) if max_y is not None else None,
         })
+    current_index = getattr(st, 'current_print_object_index', None)
     return jsonify({
         'success': True,
         'bed': {'width_mm': BED_WIDTH_MM, 'depth_mm': BED_DEPTH_MM},
         'objects': out,
+        'current_object_index': current_index if isinstance(current_index, int) and current_index >= 0 else None,
     })
 
 

@@ -51,11 +51,13 @@ function formatDate(iso: string | null): string {
 
 function FileCard({
   file,
+  isSelected,
   onDownload,
   onDelete,
   onSelectForPrint,
 }: {
   file: GcodeFileItem
+  isSelected?: boolean
   onDownload: () => void
   onDelete: () => void
   onSelectForPrint?: () => void
@@ -71,7 +73,13 @@ function FileCard({
   if (file.bed_temp != null) meta.push(`🌡️ Mesa: ${file.bed_temp}°C`)
 
   return (
-    <Card size="sm" className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
+    <Card
+      size="sm"
+      className={cn(
+        "flex flex-col gap-4 p-4 sm:flex-row sm:items-start transition-colors",
+        isSelected && "ring-2 ring-primary bg-primary/10 dark:bg-primary/20 border-primary"
+      )}
+    >
       <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
         {file.thumbnail ? (
           <>
@@ -154,7 +162,7 @@ export function Files() {
     copyUploadUrl,
   } = useFiles()
 
-  const { setSelectedFile } = useSelectedPrintFile()
+  const { selectedFile, setSelectedFile } = useSelectedPrintFile()
   const [dragOver, setDragOver] = useState(false)
 
   const handleSelectForPrint = (file: GcodeFileItem) => {
@@ -249,7 +257,12 @@ export function Files() {
                   .map((file) => (
                     <li
                       key={file.id}
-                      className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:gap-3"
+                      className={cn(
+                        "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:gap-3 transition-colors",
+                        selectedFile?.id === file.id
+                          ? "border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-primary"
+                          : "border-border bg-muted/30"
+                      )}
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
                         {file.thumbnail ? (
@@ -314,6 +327,7 @@ export function Files() {
                   <FileCard
                     key={file.id}
                     file={file}
+                    isSelected={selectedFile?.id === file.id}
                     onDownload={() => downloadFile(file.id)}
                     onDelete={() => openDeleteConfirm(file.id)}
                     onSelectForPrint={() => handleSelectForPrint(file)}

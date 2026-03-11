@@ -95,9 +95,12 @@ export function AppHeader({
     "/mistura",
   ];
   const { state: printerState } = usePrinterStatus();
-  // Esconder steps e liberar header quando imprimindo ou em falha (igual em ambos os casos)
+  // Esconder steps e liberar header quando imprimindo, em falha, ou ao chegar do fluxo "iniciar impressão"
+  const fromPrintStart = location.state?.fromPrintStart === true;
   const hideStepperAndLiberateHeader =
-    printerState === "printing" || printerState === "failure";
+    printerState === "printing" ||
+    printerState === "failure" ||
+    fromPrintStart;
   const showPrintFlowStepper =
     PRINT_FLOW_ROUTES.includes(location.pathname) && !hideStepperAndLiberateHeader;
 

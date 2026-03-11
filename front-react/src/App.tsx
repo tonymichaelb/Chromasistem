@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SelectedPrintFileProvider } from "@/contexts/SelectedPrintFileContext";
 import { PrinterCommandProvider } from "@/contexts/PrinterCommandContext";
+import { PrinterStatusProvider } from "@/contexts/PrinterStatusContext";
 import { Login } from "@/pages/login/Login";
 import { Register } from "@/pages/register/Register";
 import { Dashboard } from "@/pages/dashboard/Dashboard";
@@ -17,8 +18,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <PrinterCommandProvider>
-          <SelectedPrintFileProvider>
-            <Routes>
+          <PrinterStatusProvider>
+            <SelectedPrintFileProvider>
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/dashboard" element={<Dashboard />} />
@@ -30,8 +32,9 @@ function App() {
               <Route path="/wifi" element={<Wifi />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-          </SelectedPrintFileProvider>
+              </Routes>
+            </SelectedPrintFileProvider>
+          </PrinterStatusProvider>
         </PrinterCommandProvider>
       </AuthProvider>
     </BrowserRouter>

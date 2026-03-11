@@ -182,6 +182,7 @@ export function getMockResponse(
         { id: 1, name: "Peça 2", min_x: 80, min_y: 20, max_x: 120, max_y: 60 },
         { id: 2, name: "Peça 3", min_x: 140, min_y: 20, max_x: 180, max_y: 60 },
       ],
+      current_object_index: 0,
     });
   }
   if (path === "/api/printer/current-brush")

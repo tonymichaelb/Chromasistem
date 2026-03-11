@@ -44,13 +44,13 @@ export function useRevisao() {
         const statusData = await statusRes.json()
         if (statusData?.status?.state === "printing") {
           setWaitingForPrintStart(false)
-          navigate("/dashboard")
+          navigate("/dashboard", { state: { fromPrintStart: true } })
           return
         }
       }
       setWaitingForPrintStart(false)
       showNotification("Impressão iniciada no servidor. Acompanhe no Monitor.", "info")
-      navigate("/dashboard")
+      navigate("/dashboard", { state: { fromPrintStart: true } })
     } catch {
       setWaitingForPrintStart(false)
       showNotification("Erro ao iniciar impressão", "error")

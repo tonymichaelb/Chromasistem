@@ -1,36 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
+import { usePrinterStatusContext, type PrinterStatus } from "@/contexts/PrinterStatusContext"
 
-const STATUS_POLL_MS = 3000
-const MAX_UNAUTHORIZED_RETRIES = 2
-const STATUS_RETRIES_ON_ERROR = 3
-const STATUS_RETRY_DELAY_MS = 1000
-
-export interface PrinterStatus {
-  connected: boolean
-  state: "idle" | "printing" | "paused" | "failure"
-  temperature: {
-    nozzle: number
-    bed: number
-    target_nozzle: number
-    target_bed: number
-  }
-  filename: string
-  progress: number
-  time_elapsed: string
-  time_remaining: string
-  filament?: {
-    sensor_enabled: boolean
-    has_filament?: boolean
-  }
-  /** Detecção de falhas (Task 4) */
-  failure_detected?: boolean
-  failure_message?: string | null
-  failure_code?: string | null
-  skipped_objects_count?: number
-}
+export type { PrinterStatus }
 
 export type PauseOption = "keep_temp" | "cold" | "filament_change"
 
@@ -46,6 +20,8 @@ export interface BedObject {
 export interface BedPreview {
   bed: { width_mm: number; depth_mm: number }
   objects: BedObject[]
+  /** Índice 0-based do objeto sendo impresso no momento (null se não houver) */
+  current_object_index: number | null
 }
 
 export interface FailureHistoryEntry {
@@ -62,7 +38,7 @@ export function useDashboard() {
   const navigate = useNavigate()
   const { username } = useAuth()
   const { exec } = usePrinterCommand()
-  const [status, setStatus] = useState<PrinterStatus | null>(null)
+  const { status, refetch } = usePrinterStatusContext()
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null)
   const [pauseModalOpen, setPauseModalOpen] = useState(false)
   const [pauseOption, setPauseOption] = useState<PauseOption>("keep_temp")
@@ -74,8 +50,6 @@ export function useDashboard() {
   const [bedPreviewOpen, setBedPreviewOpen] = useState(false)
   const [bedPreviewData, setBedPreviewData] = useState<BedPreview | null>(null)
   const [selectedObjectId, setSelectedObjectId] = useState<number | null>(null)
-  const unauthorizedCountRef = useRef(0)
-  const pollStoppedRef = useRef(false)
 
   const fetchOptions = { credentials: "include" as RequestCredentials }
 
@@ -84,62 +58,6 @@ export function useDashboard() {
     setTimeout(() => setNotification(null), 3000)
   }, [])
 
-  const fetchStatus = useCallback(async (): Promise<boolean> => {
-    if (pollStoppedRef.current) return true
-    try {
-      const res = await fetch("/api/printer/status", fetchOptions)
-      if (res.status === 401) {
-        unauthorizedCountRef.current += 1
-        if (unauthorizedCountRef.current >= MAX_UNAUTHORIZED_RETRIES) {
-          pollStoppedRef.current = true
-          navigate("/login")
-        }
-        return true
-      }
-      unauthorizedCountRef.current = 0
-      const data = await res.json()
-      if (data.success && data.status) {
-        setStatus(data.status)
-        return true
-      }
-      setStatus(null)
-      return false
-    } catch {
-      setStatus(null)
-      return false
-    }
-  }, [navigate])
-
-  useEffect(() => {
-    let cancelled = false
-    let timeoutId: ReturnType<typeof setTimeout>
-    const scheduleNext = () => {
-      if (cancelled) return
-      timeoutId = setTimeout(() => {
-        runWithRetries()
-      }, STATUS_POLL_MS)
-    }
-    const runWithRetries = async () => {
-      if (cancelled) return
-      let attempt = 0
-      while (attempt <= STATUS_RETRIES_ON_ERROR) {
-        const ok = await fetchStatus()
-        if (cancelled) return
-        if (ok) break
-        attempt++
-        if (attempt <= STATUS_RETRIES_ON_ERROR) {
-          await new Promise((r) => setTimeout(r, STATUS_RETRY_DELAY_MS))
-        }
-      }
-      scheduleNext()
-    }
-    runWithRetries()
-    return () => {
-      cancelled = true
-      clearTimeout(timeoutId)
-    }
-  }, [fetchStatus])
-
   const connect = async () => {
     await exec("Conectando à impressora…", async () => {
       setConnectLoading(true)
@@ -147,7 +65,7 @@ export function useDashboard() {
         const res = await fetch("/api/printer/connect", { method: "POST", ...fetchOptions })
         const data = await res.json()
         showNotification(data.message || "Conectado", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao conectar impressora", "error")
       } finally {
@@ -164,7 +82,7 @@ export function useDashboard() {
         const res = await fetch("/api/printer/disconnect", { method: "POST", ...fetchOptions })
         const data = await res.json()
         showNotification(data.message || "Desconectado", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao desconectar impressora", "error")
       }
@@ -181,7 +99,7 @@ export function useDashboard() {
       })
       const data = await res.json()
       showNotification(data.message || "Iniciado", data.success ? "success" : "error")
-      if (data.success) fetchStatus()
+      if (data.success) refetch()
     } catch {
       showNotification("Erro ao iniciar impressão", "error")
     }
@@ -202,7 +120,7 @@ export function useDashboard() {
         })
         const data = await res.json()
         showNotification(data.message || "Pausado", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao pausar impressão", "error")
       }
@@ -215,7 +133,7 @@ export function useDashboard() {
         const res = await fetch("/api/printer/resume", { method: "POST", ...fetchOptions })
         const data = await res.json()
         showNotification(data.message || "Retomado", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao retomar impressão", "error")
       }
@@ -230,7 +148,7 @@ export function useDashboard() {
         const res = await fetch("/api/printer/stop", { method: "POST", ...fetchOptions })
         const data = await res.json()
         showNotification(data.message || "Parado", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao parar impressão", "error")
       }
@@ -280,7 +198,7 @@ export function useDashboard() {
         const res = await fetch("/api/printer/failure/resolved", { method: "POST", ...fetchOptions })
         const data = await res.json()
         showNotification(data.message || "Retomando impressão", data.success ? "success" : "error")
-        if (data.success) fetchStatus()
+        if (data.success) refetch()
       } catch {
         showNotification("Erro ao retomar impressão", "error")
       }
@@ -299,7 +217,7 @@ export function useDashboard() {
         const data = await res.json()
         showNotification(data.message || "Pulando item", data.success ? "success" : "error")
         if (data.success) {
-          fetchStatus()
+          refetch()
           setBedPreviewOpen(false)
           setSelectedObjectId(null)
         }
@@ -331,7 +249,11 @@ export function useDashboard() {
       if (res.status === 401) return null
       const data = await res.json()
       if (data.success && data.bed && Array.isArray(data.objects)) {
-        setBedPreviewData({ bed: data.bed, objects: data.objects })
+        setBedPreviewData({
+          bed: data.bed,
+          objects: data.objects,
+          current_object_index: typeof data.current_object_index === "number" && data.current_object_index >= 0 ? data.current_object_index : null,
+        })
         return data.objects.length
       }
       setBedPreviewData(null)
@@ -348,6 +270,34 @@ export function useDashboard() {
     setBedPreviewOpen(true)
     return count
   }, [fetchBedPreview])
+
+  const [reportFailureLoading, setReportFailureLoading] = useState(false)
+
+  useEffect(() => {
+    if (reportFailureLoading && status?.state === "failure") setReportFailureLoading(false)
+  }, [reportFailureLoading, status?.state])
+
+  const reportManualFailure = useCallback(async () => {
+    setReportFailureLoading(true)
+    try {
+      const res = await fetch("/api/printer/failure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Peça com defeito", code: "ERR" }),
+        ...fetchOptions,
+      })
+      const data = await res.json()
+      if (!data.success) {
+        showNotification(data.message || "Erro ao reportar falha", "error")
+        setReportFailureLoading(false)
+        return
+      }
+      refetch()
+    } catch {
+      showNotification("Erro ao reportar falha", "error")
+      setReportFailureLoading(false)
+    }
+  }, [fetchOptions, showNotification, refetch])
 
   return {
     username,
@@ -391,5 +341,7 @@ export function useDashboard() {
     selectedObjectId,
     setSelectedObjectId,
     openBedPreviewForSkip,
+    reportFailureLoading,
+    reportManualFailure,
   }
 }

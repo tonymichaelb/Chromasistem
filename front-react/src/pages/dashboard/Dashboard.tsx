@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { AppHeader } from "@/components/AppHeader"
+import { BedPreviewCanvas } from "@/components/BedPreviewCanvas"
 import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
 import { useDashboard, type PauseOption } from "./hook"
@@ -92,6 +93,8 @@ export function Dashboard() {
     selectedObjectId,
     setSelectedObjectId,
     openBedPreviewForSkip,
+    reportFailureLoading,
+    reportManualFailure,
   } = useDashboard()
 
   return (
@@ -111,6 +114,23 @@ export function Dashboard() {
             )}
           >
             {notification.message}
+          </div>
+        )}
+
+        {/* Overlay de loading até o bloco "Falha detectada" aparecer */}
+        {reportFailureLoading && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="mx-4 flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-border bg-background p-8 shadow-2xl">
+              <div className="relative flex h-12 w-12 items-center justify-center">
+                <div className="absolute inset-0 animate-spin rounded-full border-4 border-muted border-t-primary" />
+              </div>
+              <p className="text-center text-sm font-medium text-foreground">
+                Reportando falha…
+              </p>
+              <p className="text-center text-xs text-muted-foreground">
+                Aguarde o bloco &quot;Falha detectada&quot; aparecer
+              </p>
+            </div>
           </div>
         )}
 
@@ -163,13 +183,26 @@ export function Dashboard() {
                       : "Sensor desabilitado"}
                 </Badge>
               </div>
-              <div className="flex gap-2 pt-2">
-                <Button className="flex-1" onClick={connect} disabled={connectLoading}>
-                  {connectLoading ? "Conectando…" : "Conectar"}
-                </Button>
-                <Button variant="secondary" className="flex-1" onClick={openDisconnectConfirm}>
-                  Desconectar
-                </Button>
+              <div className="flex flex-col gap-2 pt-2">
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={connect} disabled={connectLoading}>
+                    {connectLoading ? "Conectando…" : "Conectar"}
+                  </Button>
+                  <Button variant="secondary" className="flex-1" onClick={openDisconnectConfirm}>
+                    Desconectar
+                  </Button>
+                </div>
+                {status?.state === "printing" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                    onClick={reportManualFailure}
+                    disabled={reportFailureLoading}
+                  >
+                    Peça com defeito
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -449,61 +482,14 @@ export function Dashboard() {
           {bedPreviewData && (
             <>
               <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <div
-                  className="relative mx-auto overflow-hidden rounded bg-muted"
-                  style={{
-                    width: "100%",
-                    maxWidth: 280,
-                    aspectRatio: `${bedPreviewData.bed.width_mm}/${bedPreviewData.bed.depth_mm}`,
-                  }}
-                >
-                  <svg
-                    viewBox={`0 0 ${bedPreviewData.bed.width_mm} ${bedPreviewData.bed.depth_mm}`}
-                    className="h-full w-full"
-                    preserveAspectRatio="xMidYMid meet"
-                  >
-                    <rect
-                      width={bedPreviewData.bed.width_mm}
-                      height={bedPreviewData.bed.depth_mm}
-                      fill="var(--muted)"
-                      stroke="var(--border)"
-                      strokeWidth={0.5}
-                    />
-                    {bedPreviewData.objects.map((obj) => {
-                      const widthMm = bedPreviewData.bed.width_mm
-                      const depthMm = bedPreviewData.bed.depth_mm
-                      let minX = obj.min_x ?? 0
-                      let minY = obj.min_y ?? 0
-                      let maxX = obj.max_x ?? minX
-                      let maxY = obj.max_y ?? minY
-                      minX = Math.max(0, Math.min(minX, widthMm))
-                      maxX = Math.max(0, Math.min(maxX, widthMm))
-                      minY = Math.max(0, Math.min(minY, depthMm))
-                      maxY = Math.max(0, Math.min(maxY, depthMm))
-                      if (maxX <= minX) maxX = minX + 5
-                      if (maxY <= minY) maxY = minY + 5
-                      const w = maxX - minX
-                      const h = maxY - minY
-                      const svgY = depthMm - maxY
-                      const selected = selectedObjectId === obj.id
-                      return (
-                        <rect
-                          key={obj.id}
-                          x={minX}
-                          y={svgY}
-                          width={w}
-                          height={h}
-                          fill={selected ? "var(--primary)" : "var(--primary / 0.3)"}
-                          stroke="var(--primary)"
-                          strokeWidth={selected ? 1.5 : 0.5}
-                          className="cursor-pointer"
-                          onClick={() => setSelectedObjectId(obj.id)}
-                          role="button"
-                          aria-label={obj.name ?? `Objeto ${obj.id + 1}`}
-                        />
-                      )
-                    })}
-                  </svg>
+                <div className="mx-auto flex justify-center">
+                  <BedPreviewCanvas
+                    bed={bedPreviewData.bed}
+                    objects={bedPreviewData.objects}
+                    selectedObjectId={selectedObjectId}
+                    onSelectObject={setSelectedObjectId}
+                    currentObjectIndex={bedPreviewData.current_object_index}
+                  />
                 </div>
                 {selectedObjectId != null && bedPreviewData.objects.some((o) => o.id === selectedObjectId) && (
                   <p className="mt-2 text-center text-sm text-muted-foreground">

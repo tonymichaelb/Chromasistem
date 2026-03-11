@@ -26,6 +26,8 @@ current_failure_message = None
 current_failure_code = None
 skip_requested = False
 skip_object_id = None
+# Índice 0-based do objeto sendo impresso no momento (para preview da mesa)
+current_print_object_index = None
 
 _consecutive_cmd_failures = 0
 CONSECUTIVE_FAILURES_THRESHOLD = 3
