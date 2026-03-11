@@ -1,9 +1,18 @@
 "use client"
 
+import { useMemo } from "react"
 import { Stage, Layer, Rect } from "react-konva"
 
 const PREVIEW_SIZE_PX = 360
 const MIN_RECT_PX = 32
+const GAP_PX = 4
+
+function rectsOverlap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number }
+): boolean {
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y)
+}
 
 export interface BedPreviewObject {
   id: number
@@ -43,6 +52,55 @@ export function BedPreviewCanvas({
   const scaleX = PREVIEW_SIZE_PX / bed.width_mm
   const scaleY = PREVIEW_SIZE_PX / bed.depth_mm
 
+  const positions = useMemo(() => {
+    const out: { x: number; y: number; w: number; h: number }[] = []
+    for (const obj of objects) {
+      let minX = Math.max(0, Math.min(obj.min_x ?? 0, bed.width_mm))
+      let minY = Math.max(0, Math.min(obj.min_y ?? 0, bed.depth_mm))
+      let maxX = Math.max(0, Math.min(obj.max_x ?? minX, bed.width_mm))
+      let maxY = Math.max(0, Math.min(obj.max_y ?? minY, bed.depth_mm))
+      if (maxX <= minX) maxX = minX + 5
+      if (maxY <= minY) maxY = minY + 5
+      const wMm = maxX - minX
+      const hMm = maxY - minY
+      let x = minX * scaleX
+      let y = (bed.depth_mm - maxY) * scaleY
+      let w = Math.max(MIN_RECT_PX, wMm * scaleX)
+      let h = Math.max(MIN_RECT_PX, hMm * scaleY)
+      if (x < 0) { w += x; x = 0 }
+      if (y < 0) { h += y; y = 0 }
+      if (x + w > PREVIEW_SIZE_PX) x = PREVIEW_SIZE_PX - w
+      if (y + h > PREVIEW_SIZE_PX) y = PREVIEW_SIZE_PX - h
+
+      let rx = x
+      let ry = y
+      let changed = true
+      while (changed) {
+        changed = false
+        for (let j = 0; j < out.length; j++) {
+          if (rectsOverlap(out[j], { x: rx, y: ry, w, h })) {
+            const other = out[j]
+            const tryY = other.y - h - GAP_PX
+            if (tryY >= 0) {
+              ry = tryY
+            } else {
+              rx = other.x + other.w + GAP_PX
+              if (rx + w > PREVIEW_SIZE_PX) rx = 0
+            }
+            changed = true
+            break
+          }
+        }
+      }
+      rx = Math.max(0, Math.min(rx, PREVIEW_SIZE_PX - w))
+      ry = Math.max(0, Math.min(ry, PREVIEW_SIZE_PX - h))
+      if (rx + w > PREVIEW_SIZE_PX) rx = PREVIEW_SIZE_PX - w
+      if (ry + h > PREVIEW_SIZE_PX) ry = PREVIEW_SIZE_PX - h
+      out.push({ x: rx, y: ry, w, h })
+    }
+    return out
+  }, [bed.width_mm, bed.depth_mm, objects, scaleX, scaleY])
+
   return (
     <div
       className="overflow-hidden rounded border border-border bg-muted"
@@ -50,7 +108,6 @@ export function BedPreviewCanvas({
     >
       <Stage width={PREVIEW_SIZE_PX} height={PREVIEW_SIZE_PX}>
         <Layer>
-          {/* Mesa (fundo) em pixels */}
           <Rect
             x={0}
             y={0}
@@ -61,30 +118,18 @@ export function BedPreviewCanvas({
             strokeWidth={1}
             listening={false}
           />
-          {/* Objetos: mm → px; Y invertido (fundo da mesa = topo do canvas) */}
-          {objects.map((obj) => {
-            const minX = Math.max(0, Math.min(obj.min_x ?? 0, bed.width_mm))
-            const minY = Math.max(0, Math.min(obj.min_y ?? 0, bed.depth_mm))
-            const maxX = Math.max(0, Math.min(obj.max_x ?? minX, bed.width_mm))
-            const maxY = Math.max(0, Math.min(obj.max_y ?? minY, bed.depth_mm))
-            const wMm = Math.max(0.1, maxX - minX)
-            const hMm = Math.max(0.1, maxY - minY)
-            const x = minX * scaleX
-            const y = (bed.depth_mm - maxY) * scaleY
-            const wPx = wMm * scaleX
-            const hPx = hMm * scaleY
-            const w = Math.max(MIN_RECT_PX, wPx)
-            const h = Math.max(MIN_RECT_PX, hPx)
+          {objects.map((obj, i) => {
+            const pos = positions[i]
+            if (!pos) return null
             const selected = selectedObjectId === obj.id
             const isPrinting = currentObjectIndex != null && currentObjectIndex === obj.id
-
             return (
               <Rect
                 key={obj.id}
-                x={x}
-                y={y}
-                width={w}
-                height={h}
+                x={pos.x}
+                y={pos.y}
+                width={pos.w}
+                height={pos.h}
                 fill={
                   selected ? "#2563eb" : isPrinting ? "rgba(34, 197, 94, 0.6)" : "rgba(37, 99, 235, 0.4)"
                 }

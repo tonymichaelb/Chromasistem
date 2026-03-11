@@ -178,11 +178,11 @@ export function getMockResponse(
       success: true,
       bed: { width_mm: 220, depth_mm: 220 },
       objects: [
-        { id: 0, name: "Peça 1", min_x: 20, min_y: 20, max_x: 60, max_y: 60 },
-        { id: 1, name: "Peça 2", min_x: 80, min_y: 20, max_x: 120, max_y: 60 },
-        { id: 2, name: "Peça 3", min_x: 140, min_y: 20, max_x: 180, max_y: 60 },
+        { id: 0, name: "Objeto 1", min_x: 0, min_y: -10, max_x: 0, max_y: -10 },
+        { id: 1, name: "Objeto 2", min_x: 0, min_y: 140, max_x: 0, max_y: 140 },
+        { id: 2, name: "Objeto 3", min_x: 2.3, min_y: 10, max_x: 2.3, max_y: 10 },
       ],
-      current_object_index: 0,
+      current_object_index: 1,
     });
   }
   if (path === "/api/printer/current-brush")

@@ -75,7 +75,7 @@ if command -v node &>/dev/null && [ -d "front-react" ]; then
         (cd front-react && npm install)
     fi
     echo "Gerando build do React para produção..."
-    (cd front-react && npm run build)
+    (cd front-react && npm install && npm run build)
     if [ -f "front-react/dist/index.html" ]; then
         echo "✓ Build React gerado em front-react/dist/"
     else

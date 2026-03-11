@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
@@ -52,15 +53,17 @@ function formatDate(iso: string | null): string {
 function FileCard({
   file,
   isSelected,
+  onSelectForPrint,
+  onDeselect,
   onDownload,
   onDelete,
-  onSelectForPrint,
 }: {
   file: GcodeFileItem
   isSelected?: boolean
+  onSelectForPrint?: () => void
+  onDeselect?: () => void
   onDownload: () => void
   onDelete: () => void
-  onSelectForPrint?: () => void
 }) {
   const meta: string[] = []
   if (file.print_time) meta.push(`⏱️ ${file.print_time}`)
@@ -80,51 +83,72 @@ function FileCard({
         isSelected && "ring-2 ring-primary bg-primary/10 dark:bg-primary/20 border-primary"
       )}
     >
-      <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-        {file.thumbnail ? (
-          <>
-            <img
-              src={`/static/${file.thumbnail}`}
-              alt=""
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none"
-                const next = e.currentTarget.nextElementSibling as HTMLElement
-                if (next) next.classList.remove("hidden")
-              }}
-            />
-            <div className="hidden size-full items-center justify-center">
-              <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-8 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {file.thumbnail ? (
+            <>
+              <img
+                src={`/static/${file.thumbnail}`}
+                alt=""
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none"
+                  const next = e.currentTarget.nextElementSibling as HTMLElement
+                  if (next) next.classList.remove("hidden")
+                }}
+              />
+              <div className="hidden size-full items-center justify-center">
+                <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-8 text-muted-foreground" />
+              </div>
+            </>
+          ) : (
+            <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-8 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="truncate font-medium">{file.name}</h3>
+          {meta.length > 0 && (
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+              {meta.map((m, i) => (
+                <span key={i}>{m}</span>
+              ))}
             </div>
-          </>
-        ) : (
-          <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-8 text-muted-foreground" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <h3 className="truncate font-medium">{file.name}</h3>
-        {meta.length > 0 && (
+          )}
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {meta.map((m, i) => (
-              <span key={i}>{m}</span>
-            ))}
+            <span>📦 {formatFileSize(file.size)}</span>
+            <span>📅 {formatDate(file.uploaded)}</span>
+            <span>🖨️ {file.print_count}x impresso</span>
           </div>
-        )}
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>📦 {formatFileSize(file.size)}</span>
-          <span>📅 {formatDate(file.uploaded)}</span>
-          <span>🖨️ {file.print_count}x impresso</span>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Última impressão: {formatDate(file.last_printed)}
+          <div className="text-xs text-muted-foreground">
+            Última impressão: {formatDate(file.last_printed)}
+          </div>
         </div>
       </div>
-      <div className="flex shrink-0 flex-row flex-wrap gap-2 sm:flex-col sm:gap-1 [&_button]:min-h-10 [&_button]:touch-manipulation [&_button]:flex-1 sm:[&_button]:flex-none">
-        {onSelectForPrint && (
-          <Button size="sm" variant="secondary" onClick={onSelectForPrint} title="Usar na Revisão e imprimir">
-            <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />
-            Selecionar para impressão
-          </Button>
+      <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:flex-col sm:items-stretch sm:gap-1 [&_button]:min-h-10 [&_button]:touch-manipulation [&_button]:flex-1 sm:[&_button]:flex-none">
+        {onSelectForPrint != null && (
+          isSelected ? (
+            <Badge asChild>
+              <button
+                type="button"
+                onClick={onDeselect}
+                className="h-9 w-fit gap-1.5 px-3 py-1.5 text-xs hover:opacity-90"
+                title="Clique para desmarcar"
+              >
+                <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-3.5" />
+                Selecionado
+              </button>
+            </Badge>
+          ) : (
+            <Badge variant="outline" asChild>
+              <button
+                type="button"
+                onClick={onSelectForPrint}
+                className="h-9 w-fit gap-1.5 px-3 py-1.5 text-xs transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                Usar na Revisão
+              </button>
+            </Badge>
+          )
         )}
         <Button size="sm" variant="secondary" onClick={onDownload}>
           <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="size-4" />
@@ -168,6 +192,11 @@ export function Files() {
   const handleSelectForPrint = (file: GcodeFileItem) => {
     setSelectedFile(file)
     showNotification("Arquivo selecionado. Avance para Revisão.", "success")
+  }
+
+  const handleDeselect = () => {
+    setSelectedFile(null)
+    showNotification("Seleção removida.", "info")
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -242,61 +271,6 @@ export function Files() {
           </CardContent>
         </Card>
 
-        {/* Arquivos G-Code Recentes */}
-        {!loading && files.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Arquivos G-Code Recentes</CardTitle>
-              <CardDescription>Últimos arquivos enviados — selecione para usar na Revisão e imprimir</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                {[...files]
-                  .sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
-                  .slice(0, 5)
-                  .map((file) => (
-                    <li
-                      key={file.id}
-                      className={cn(
-                        "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:gap-3 transition-colors",
-                        selectedFile?.id === file.id
-                          ? "border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-primary"
-                          : "border-border bg-muted/30"
-                      )}
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-                        {file.thumbnail ? (
-                          <img
-                            src={`/static/${file.thumbnail}`}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{file.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatFileSize(file.size)} · {file.print_count}x impresso
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleSelectForPrint(file)}
-                        className="w-full sm:w-auto min-h-10 touch-manipulation"
-                      >
-                        <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />
-                        Selecionar para impressão
-                      </Button>
-                    </li>
-                  ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Lista de arquivos */}
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -328,9 +302,10 @@ export function Files() {
                     key={file.id}
                     file={file}
                     isSelected={selectedFile?.id === file.id}
+                    onSelectForPrint={() => handleSelectForPrint(file)}
+                    onDeselect={handleDeselect}
                     onDownload={() => downloadFile(file.id)}
                     onDelete={() => openDeleteConfirm(file.id)}
-                    onSelectForPrint={() => handleSelectForPrint(file)}
                   />
                 ))}
               </div>

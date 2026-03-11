@@ -27,8 +27,10 @@ import { AppHeader } from "@/components/AppHeader"
 import { BedPreviewCanvas } from "@/components/BedPreviewCanvas"
 import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
 import { cn } from "@/lib/utils"
+import { MOCK } from "@/config"
 import { useDashboard, type PauseOption } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { useEffect } from "react"
 import {
   PlayIcon,
   PauseIcon,
@@ -92,10 +94,15 @@ export function Dashboard() {
     bedPreviewData,
     selectedObjectId,
     setSelectedObjectId,
+    fetchBedPreview,
     openBedPreviewForSkip,
     reportFailureLoading,
     reportManualFailure,
   } = useDashboard()
+
+  useEffect(() => {
+    if (MOCK) fetchBedPreview()
+  }, [MOCK, fetchBedPreview])
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -352,6 +359,34 @@ export function Dashboard() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Preview da mesa no monitor (MOCK): mesmo dados do modal para testar antes do cliente */}
+          {MOCK && bedPreviewData && (
+            <Card className="sm:col-span-2">
+              <CardHeader>
+                <CardTitle>Preview da mesa (teste)</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Dados do bed-preview no monitor. Verde = objeto em impressão. Azul = selecionável (pular item).
+                </p>
+              </CardHeader>
+              <CardContent className="flex flex-col items-start gap-2">
+                <div className="mx-auto flex justify-center">
+                  <BedPreviewCanvas
+                    bed={bedPreviewData.bed}
+                    objects={bedPreviewData.objects}
+                    selectedObjectId={selectedObjectId}
+                    onSelectObject={setSelectedObjectId}
+                    currentObjectIndex={bedPreviewData.current_object_index}
+                  />
+                </div>
+                {bedPreviewData.current_object_index != null && (
+                  <p className="text-xs text-muted-foreground">
+                    Em impressão: Objeto {bedPreviewData.current_object_index + 1}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <PrintFlowAdvance />

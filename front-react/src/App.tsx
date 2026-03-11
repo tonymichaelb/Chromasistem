@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SelectedPrintFileProvider } from "@/contexts/SelectedPrintFileContext";
 import { PrinterCommandProvider } from "@/contexts/PrinterCommandContext";
@@ -16,6 +17,7 @@ import { Wifi } from "@/pages/wifi/Wifi";
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <PrinterCommandProvider>
           <PrinterStatusProvider>

@@ -51,7 +51,18 @@ export function AppHeader({
   const { username: usernameContext, setUsername } = useAuth();
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const updateHeight = () => setHeaderHeight(el.offsetHeight);
+    updateHeight();
+    const ro = new ResizeObserver(updateHeight);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const username = usernameProp ?? usernameContext ?? "";
   const onLogout =
@@ -115,9 +126,10 @@ export function AppHeader({
   ];
 
   return (
+    <>
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 border-b border-border bg-background"
+      className="fixed top-0 left-0 right-0 z-40 border-b border-border bg-background"
     >
       <div className="flex h-14 items-center justify-between gap-2 px-3 sm:px-4 md:px-6">
         <Link to="/dashboard" className="flex shrink-0 items-center gap-2">
@@ -295,5 +307,7 @@ export function AppHeader({
         </div>
       )}
     </header>
+    <div style={{ height: headerHeight || 56 }} aria-hidden className="shrink-0" />
+    </>
   );
 }

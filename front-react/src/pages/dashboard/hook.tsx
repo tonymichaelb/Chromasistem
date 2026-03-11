@@ -340,6 +340,7 @@ export function useDashboard() {
     bedPreviewData,
     selectedObjectId,
     setSelectedObjectId,
+    fetchBedPreview,
     openBedPreviewForSkip,
     reportFailureLoading,
     reportManualFailure,
