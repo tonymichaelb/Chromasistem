@@ -23,6 +23,7 @@ export function PrintFlowStepper() {
         >
           {PRINT_FLOW_STEPS.map(({ step, label, path }, index) => {
             const isActive = currentStep === step
+            const isCompleted = step < currentStep
             const canNavigate = step === 1 || connected
 
             const stepContent = (
@@ -30,9 +31,13 @@ export function PrintFlowStepper() {
                 <div
                   className={cn(
                     "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors",
-                    isActive
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-muted/50 text-muted-foreground"
+                    isActive &&
+                      "border-primary bg-primary/10 text-primary dark:bg-primary/20",
+                    isCompleted &&
+                      "border-primary/40 bg-primary/10 text-primary/80 dark:border-primary/50 dark:bg-primary/15 dark:text-primary/70",
+                    !isActive &&
+                      !isCompleted &&
+                      "border-border bg-muted/50 text-muted-foreground"
                   )}
                 >
                   {step}
@@ -40,7 +45,12 @@ export function PrintFlowStepper() {
                 <div
                   className={cn(
                     "text-[13px] transition-colors",
-                    isActive ? "font-semibold text-foreground" : "text-muted-foreground"
+                    isActive && "font-semibold text-foreground",
+                    isCompleted &&
+                      "font-medium text-primary/80 dark:text-primary/70",
+                    !isActive &&
+                      !isCompleted &&
+                      "text-muted-foreground"
                   )}
                 >
                   {label}

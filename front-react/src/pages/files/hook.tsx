@@ -33,7 +33,6 @@ export function useFiles() {
   } | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [fileToDeleteId, setFileToDeleteId] = useState<number | null>(null)
-  const [printConfirm, setPrintConfirm] = useState<{ fileId: number; fileName: string } | null>(null)
 
   const showNotification = useCallback((message: string, type: "success" | "error" | "info" = "info") => {
     setNotification({ message, type })
@@ -130,27 +129,6 @@ export function useFiles() {
     }
   }, [fileToDeleteId, closeDeleteConfirm, loadFiles, showNotification])
 
-  const openPrintConfirm = useCallback((fileId: number, fileName: string) => {
-    setPrintConfirm({ fileId, fileName })
-  }, [])
-
-  const confirmPrint = useCallback(async () => {
-    const payload = printConfirm
-    setPrintConfirm(null)
-    if (!payload) return
-    try {
-      const res = await fetch(`/api/files/print/${payload.fileId}`, {
-        method: "POST",
-        ...fetchOptions,
-      })
-      const data = await res.json()
-      showNotification(data.message || "Impressão iniciada", data.success ? "success" : "error")
-      if (data.success) loadFiles()
-    } catch {
-      showNotification("Erro ao iniciar impressão", "error")
-    }
-  }, [printConfirm, showNotification, loadFiles])
-
   const downloadFile = useCallback((fileId: number) => {
     window.open(`/api/files/download/${fileId}`, "_blank")
   }, [])
@@ -187,10 +165,6 @@ export function useFiles() {
     closeDeleteConfirm,
     openDeleteConfirm,
     confirmDelete,
-    printConfirm,
-    setPrintConfirm,
-    openPrintConfirm,
-    confirmPrint,
     downloadFile,
     copyUploadUrl,
   }

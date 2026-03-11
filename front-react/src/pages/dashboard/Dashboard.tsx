@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom"
 import {
   Card,
   CardContent,
@@ -30,7 +29,6 @@ import { cn } from "@/lib/utils"
 import { useDashboard, type PauseOption } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
-  File01Icon,
   PlayIcon,
   PauseIcon,
   StopIcon,
@@ -42,10 +40,6 @@ const PAUSE_OPTIONS: { value: PauseOption; label: string }[] = [
   { value: "cold", label: "Pausa fria — Desliga aquecedores após pausar" },
   { value: "filament_change", label: "Troca de filamento — Envia M600 (se a impressora suportar)" },
 ]
-
-function formatSize(bytes: number) {
-  return `${(bytes / 1024).toFixed(1)} KB`
-}
 
 /** Formata data/hora para exibição no histórico de falhas */
 function formatDateTime(iso: string) {
@@ -61,7 +55,6 @@ export function Dashboard() {
   const {
     status,
     stateLabel,
-    recentFiles,
     notification,
     pauseModalOpen,
     setPauseModalOpen,
@@ -75,8 +68,6 @@ export function Dashboard() {
     setDisconnectConfirmOpen,
     stopConfirmOpen,
     setStopConfirmOpen,
-    printConfirm,
-    setPrintConfirm,
     connect,
     openDisconnectConfirm,
     confirmDisconnect,
@@ -87,8 +78,6 @@ export function Dashboard() {
     resume,
     openStopConfirm,
     confirmStop,
-    openPrintConfirm,
-    confirmPrint,
     isFailure,
     failureResolve,
     failureResolved,
@@ -330,61 +319,6 @@ export function Dashboard() {
               </Button>
             </CardContent>
           </Card>
-
-          {/* Arquivos G-Code Recentes */}
-          <Card className="sm:col-span-2 lg:col-span-3">
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Arquivos G-Code Recentes</CardTitle>
-              <Link to="/files" className="w-full sm:w-auto">
-                <Button variant="secondary" size="sm" className="w-full sm:w-auto">Ver Todos</Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {recentFiles.length > 0 ? (
-                <ul className="space-y-2">
-                  {recentFiles.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:gap-3"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-                        {file.thumbnail ? (
-                          <img
-                            src={`/static/${file.thumbnail}`}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{file.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatSize(file.size)} · {file.print_count}x impresso
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => openPrintConfirm(file.id, file.name)}
-                        className="w-full sm:w-auto min-h-10 touch-manipulation"
-                      >
-                        <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-4" />
-                        Imprimir
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-8 text-center">
-                  <p className="text-sm text-muted-foreground">Nenhum arquivo G-Code ainda</p>
-                  <Link to="/files">
-                    <Button>Fazer Upload</Button>
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         <PrintFlowAdvance />
@@ -452,24 +386,6 @@ export function Dashboard() {
             <AlertDialogAction onClick={confirmStop} variant="destructive">
               Parar
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirmação: Iniciar impressão do arquivo */}
-      <AlertDialog open={!!printConfirm} onOpenChange={(open) => !open && setPrintConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Iniciar impressão</AlertDialogTitle>
-            <AlertDialogDescription>
-              {printConfirm
-                ? `Iniciar impressão de "${printConfirm.fileName}"?`
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmPrint}>Imprimir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

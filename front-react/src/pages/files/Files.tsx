@@ -26,7 +26,6 @@ import { useFiles, type GcodeFileItem } from "./hook"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   File01Icon,
-  PlayIcon,
   Delete02Icon,
   Download01Icon,
   RefreshIcon,
@@ -52,13 +51,11 @@ function formatDate(iso: string | null): string {
 
 function FileCard({
   file,
-  onPrint,
   onDownload,
   onDelete,
   onSelectForPrint,
 }: {
   file: GcodeFileItem
-  onPrint: () => void
   onDownload: () => void
   onDelete: () => void
   onSelectForPrint?: () => void
@@ -121,10 +118,6 @@ function FileCard({
             Selecionar para impressão
           </Button>
         )}
-        <Button size="sm" onClick={onPrint}>
-          <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-4" />
-          Imprimir
-        </Button>
         <Button size="sm" variant="secondary" onClick={onDownload}>
           <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="size-4" />
           Baixar
@@ -157,10 +150,6 @@ export function Files() {
     closeDeleteConfirm,
     openDeleteConfirm,
     confirmDelete,
-    printConfirm,
-    setPrintConfirm,
-    openPrintConfirm,
-    confirmPrint,
     downloadFile,
     copyUploadUrl,
   } = useFiles()
@@ -245,6 +234,56 @@ export function Files() {
           </CardContent>
         </Card>
 
+        {/* Arquivos G-Code Recentes */}
+        {!loading && files.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Arquivos G-Code Recentes</CardTitle>
+              <CardDescription>Últimos arquivos enviados — selecione para usar na Revisão e imprimir</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2">
+                {[...files]
+                  .sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+                  .slice(0, 5)
+                  .map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+                        {file.thumbnail ? (
+                          <img
+                            src={`/static/${file.thumbnail}`}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <HugeiconsIcon icon={File01Icon} strokeWidth={2} className="size-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{file.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatFileSize(file.size)} · {file.print_count}x impresso
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleSelectForPrint(file)}
+                        className="w-full sm:w-auto min-h-10 touch-manipulation"
+                      >
+                        <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />
+                        Selecionar para impressão
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Lista de arquivos */}
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -275,7 +314,6 @@ export function Files() {
                   <FileCard
                     key={file.id}
                     file={file}
-                    onPrint={() => openPrintConfirm(file.id, file.name)}
                     onDownload={() => downloadFile(file.id)}
                     onDelete={() => openDeleteConfirm(file.id)}
                     onSelectForPrint={() => handleSelectForPrint(file)}
@@ -349,22 +387,6 @@ export function Files() {
             <AlertDialogAction onClick={confirmDelete} variant="destructive">
               Excluir
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirmação imprimir */}
-      <AlertDialog open={!!printConfirm} onOpenChange={(open) => !open && setPrintConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Iniciar impressão</AlertDialogTitle>
-            <AlertDialogDescription>
-              {printConfirm ? `Iniciar impressão de "${printConfirm.fileName}"?` : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmPrint}>Imprimir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

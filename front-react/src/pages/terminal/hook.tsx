@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const STATUS_POLL_MS = 5000
+const STATUS_RETRIES_ON_ERROR = 3
+const STATUS_RETRY_DELAY_MS = 1000
 const HISTORY_POLL_MS = 1000
 const TEMP_HISTORY_MAX = 50
 
@@ -66,15 +68,15 @@ export function useTerminal() {
     [navigate]
   )
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/printer/status", fetchOptions)
       if (res.status === 401) {
         navigate("/login")
-        return
+        return true
       }
       const data = await res.json()
-      if (!data.success || !data.status) return
+      if (!data.success || !data.status) return false
       const t = data.status.temperature
       setCurrentNozzle(t.nozzle ?? null)
       setCurrentBed(t.bed ?? null)
@@ -93,8 +95,9 @@ export function useTerminal() {
         ]
         return next.slice(-TEMP_HISTORY_MAX)
       })
+      return true
     } catch {
-      // ignore
+      return false
     }
   }, [navigate])
 
@@ -126,9 +129,33 @@ export function useTerminal() {
   }, [])
 
   useEffect(() => {
-    fetchStatus()
-    const t = setInterval(fetchStatus, STATUS_POLL_MS)
-    return () => clearInterval(t)
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout>
+    const scheduleNext = () => {
+      if (cancelled) return
+      timeoutId = setTimeout(() => {
+        runWithRetries()
+      }, STATUS_POLL_MS)
+    }
+    const runWithRetries = async () => {
+      if (cancelled) return
+      let attempt = 0
+      while (attempt <= STATUS_RETRIES_ON_ERROR) {
+        const ok = await fetchStatus()
+        if (cancelled) return
+        if (ok) break
+        attempt++
+        if (attempt <= STATUS_RETRIES_ON_ERROR) {
+          await new Promise((r) => setTimeout(r, STATUS_RETRY_DELAY_MS))
+        }
+      }
+      scheduleNext()
+    }
+    runWithRetries()
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
   }, [fetchStatus])
 
   useEffect(() => {

@@ -95,9 +95,11 @@ export function AppHeader({
     "/mistura",
   ];
   const { state: printerState } = usePrinterStatus();
-  const isPrinting = printerState === "printing";
+  // Esconder steps e liberar header quando imprimindo ou em falha (igual em ambos os casos)
+  const hideStepperAndLiberateHeader =
+    printerState === "printing" || printerState === "failure";
   const showPrintFlowStepper =
-    PRINT_FLOW_ROUTES.includes(location.pathname) && !isPrinting;
+    PRINT_FLOW_ROUTES.includes(location.pathname) && !hideStepperAndLiberateHeader;
 
   // Ordem do header igual ao fluxo: Monitor → Arquivos → Terminal → Cores (Colorir, Mistura) → depois Fatiador e Wi-Fi
   const navLinks = [
@@ -126,11 +128,25 @@ export function AppHeader({
 
         {/* Desktop nav */}
         <nav className="hidden flex-1 items-center justify-center gap-1 md:flex">
-          {navLinks.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to}>
+          {navLinks.map(({ to, label, icon: Icon }) => {
+            const inPrintFlowRoute = PRINT_FLOW_ROUTES.includes(to);
+            // Monitor sempre acessível; demais etapas só quando imprimindo ou falha (header liberado)
+            const disableIndependentNav =
+              inPrintFlowRoute &&
+              to !== "/dashboard" &&
+              !hideStepperAndLiberateHeader &&
+              to !== location.pathname;
+
+            const button = (
               <Button
                 variant={location.pathname === to ? "default" : "ghost"}
                 size="sm"
+                disabled={disableIndependentNav}
+                title={
+                  disableIndependentNav
+                    ? "Use o passo a passo para avançar entre as etapas"
+                    : undefined
+                }
               >
                 {Icon && (
                   <HugeiconsIcon
@@ -141,8 +157,22 @@ export function AppHeader({
                 )}
                 {label}
               </Button>
-            </Link>
-          ))}
+            );
+
+            if (disableIndependentNav) {
+              return (
+                <div key={to} className="opacity-70 cursor-not-allowed">
+                  {button}
+                </div>
+              );
+            }
+
+            return (
+              <Link key={to} to={to}>
+                {button}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">

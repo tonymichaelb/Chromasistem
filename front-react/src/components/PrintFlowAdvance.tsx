@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { PRINT_FLOW_STEPS, getCurrentStep } from "@/lib/printFlow"
+import { cn } from "@/lib/utils"
 
 /**
  * Botão "Avançar" do fluxo de impressão. Deve ser colocado no canto inferior direito ao final de cada página do fluxo.
@@ -14,28 +15,42 @@ export function PrintFlowAdvance() {
   const { connected, state } = usePrinterStatus()
   const currentStep = getCurrentStep(location.pathname, connected, state)
   const nextStep = currentStep < 5 ? PRINT_FLOW_STEPS[currentStep] : null
+  const prevStep = currentStep > 1 ? PRINT_FLOW_STEPS[currentStep - 2] : null
   const canAdvance = nextStep && (currentStep === 1 ? connected : true)
 
-  if (!nextStep) return null
+  if (!nextStep && !prevStep) return null
+
+  const containerClass = cn(
+    "flex pt-6 pb-2",
+    prevStep ? "justify-between gap-3" : "justify-end"
+  )
 
   return (
-    <div className="flex justify-end pt-6 pb-2">
-      {canAdvance ? (
-        <Button asChild size="sm">
-          <Link to={nextStep.path}>
+    <div className={containerClass}>
+      {prevStep && (
+        <Button asChild size="sm" variant="ghost">
+          <Link to={prevStep.path}>Voltar</Link>
+        </Button>
+      )}
+
+      {nextStep && (
+        canAdvance ? (
+          <Button asChild size="sm">
+            <Link to={nextStep.path}>
+              Avançar
+              <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled
+            title={currentStep === 1 ? "Conecte a impressora para avançar" : undefined}
+          >
             Avançar
             <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />
-          </Link>
-        </Button>
-      ) : (
-        <Button
-          size="sm"
-          disabled
-          title={currentStep === 1 ? "Conecte a impressora para avançar" : undefined}
-        >
-          Avançar
-          <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />
-        </Button>
+          </Button>
+        )
       )}
     </div>
   )

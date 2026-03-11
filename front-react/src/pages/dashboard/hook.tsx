@@ -5,6 +5,8 @@ import { usePrinterCommand } from "@/contexts/PrinterCommandContext"
 
 const STATUS_POLL_MS = 3000
 const MAX_UNAUTHORIZED_RETRIES = 2
+const STATUS_RETRIES_ON_ERROR = 3
+const STATUS_RETRY_DELAY_MS = 1000
 
 export interface PrinterStatus {
   connected: boolean
@@ -28,14 +30,6 @@ export interface PrinterStatus {
   failure_message?: string | null
   failure_code?: string | null
   skipped_objects_count?: number
-}
-
-export interface GcodeFile {
-  id: number
-  name: string
-  size: number
-  print_count: number
-  thumbnail: string | null
 }
 
 export type PauseOption = "keep_temp" | "cold" | "filament_change"
@@ -69,14 +63,12 @@ export function useDashboard() {
   const { username } = useAuth()
   const { exec } = usePrinterCommand()
   const [status, setStatus] = useState<PrinterStatus | null>(null)
-  const [recentFiles, setRecentFiles] = useState<GcodeFile[]>([])
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null)
   const [pauseModalOpen, setPauseModalOpen] = useState(false)
   const [pauseOption, setPauseOption] = useState<PauseOption>("keep_temp")
   const [connectLoading, setConnectLoading] = useState(false)
   const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false)
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
-  const [printConfirm, setPrintConfirm] = useState<{ fileId: number; fileName: string } | null>(null)
   const [failureHistoryOpen, setFailureHistoryOpen] = useState(false)
   const [failureHistoryEntries, setFailureHistoryEntries] = useState<FailureHistoryEntry[]>([])
   const [bedPreviewOpen, setBedPreviewOpen] = useState(false)
@@ -92,8 +84,8 @@ export function useDashboard() {
     setTimeout(() => setNotification(null), 3000)
   }, [])
 
-  const fetchStatus = useCallback(async () => {
-    if (pollStoppedRef.current) return
+  const fetchStatus = useCallback(async (): Promise<boolean> => {
+    if (pollStoppedRef.current) return true
     try {
       const res = await fetch("/api/printer/status", fetchOptions)
       if (res.status === 401) {
@@ -102,39 +94,50 @@ export function useDashboard() {
           pollStoppedRef.current = true
           navigate("/login")
         }
-        return
+        return true
       }
       unauthorizedCountRef.current = 0
       const data = await res.json()
-      if (data.success && data.status) setStatus(data.status)
+      if (data.success && data.status) {
+        setStatus(data.status)
+        return true
+      }
+      setStatus(null)
+      return false
     } catch {
       setStatus(null)
+      return false
     }
   }, [navigate])
 
-  const fetchRecentFiles = useCallback(async () => {
-    try {
-      const res = await fetch("/api/files/list", fetchOptions)
-      if (res.status === 401) {
-        pollStoppedRef.current = true
-        navigate("/login")
-        return
+  useEffect(() => {
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout>
+    const scheduleNext = () => {
+      if (cancelled) return
+      timeoutId = setTimeout(() => {
+        runWithRetries()
+      }, STATUS_POLL_MS)
+    }
+    const runWithRetries = async () => {
+      if (cancelled) return
+      let attempt = 0
+      while (attempt <= STATUS_RETRIES_ON_ERROR) {
+        const ok = await fetchStatus()
+        if (cancelled) return
+        if (ok) break
+        attempt++
+        if (attempt <= STATUS_RETRIES_ON_ERROR) {
+          await new Promise((r) => setTimeout(r, STATUS_RETRY_DELAY_MS))
+        }
       }
-      const data = await res.json()
-      if (data.success && Array.isArray(data.files)) setRecentFiles(data.files.slice(0, 5))
-    } catch {
-      setRecentFiles([])
+      scheduleNext()
     }
-  }, [navigate])
-
-  useEffect(() => {
-    fetchRecentFiles()
-  }, [fetchRecentFiles])
-
-  useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, STATUS_POLL_MS)
-    return () => clearInterval(interval)
+    runWithRetries()
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
   }, [fetchStatus])
 
   const connect = async () => {
@@ -230,30 +233,6 @@ export function useDashboard() {
         if (data.success) fetchStatus()
       } catch {
         showNotification("Erro ao parar impressão", "error")
-      }
-    })
-  }
-
-  const openPrintConfirm = (fileId: number, fileName: string) =>
-    setPrintConfirm({ fileId, fileName })
-  const confirmPrint = async () => {
-    const payload = printConfirm
-    setPrintConfirm(null)
-    if (!payload) return
-    await exec("Iniciando impressão…", async () => {
-      try {
-        const res = await fetch(`/api/files/print/${payload.fileId}`, {
-          method: "POST",
-          ...fetchOptions,
-        })
-        const data = await res.json()
-        showNotification(data.message || "Impressão iniciada", data.success ? "success" : "error")
-        if (data.success) {
-          fetchStatus()
-          setTimeout(() => fetchRecentFiles(), 2000)
-        }
-      } catch {
-        showNotification("Erro ao iniciar impressão", "error")
       }
     })
   }
@@ -374,7 +353,6 @@ export function useDashboard() {
     username,
     status,
     stateLabel,
-    recentFiles,
     notification,
     pauseModalOpen,
     setPauseModalOpen,
@@ -388,8 +366,6 @@ export function useDashboard() {
     setDisconnectConfirmOpen,
     stopConfirmOpen,
     setStopConfirmOpen,
-    printConfirm,
-    setPrintConfirm,
     connect,
     openDisconnectConfirm,
     confirmDisconnect,
@@ -400,8 +376,6 @@ export function useDashboard() {
     resume,
     openStopConfirm,
     confirmStop,
-    openPrintConfirm,
-    confirmPrint,
     logout,
     isFailure,
     failureResolve,

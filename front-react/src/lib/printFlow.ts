@@ -12,15 +12,14 @@ export function getCurrentStep(
   connected: boolean,
   state: string | null
 ): number {
+  console.log('connected', connected)
   if (pathname === "/files") return 2
   if (pathname === "/terminal") return 3
   if (pathname === "/colorir" || pathname === "/mistura") return 4
   if (pathname === "/revisao") return 5
   if (pathname === "/dashboard") {
-    if (!connected) return 1
     if (state === "printing" || state === "paused" || state === "failure") return 6
-    // Impressora conectada mas ociosa: continua no passo 1 (Monitor),
-    // só avança de fato quando o usuário seguir o fluxo.
+    // Na tela do Monitor sempre mostramos passo 1 ativo (azul); conectado ou não.
     return 1
   }
   return 1
