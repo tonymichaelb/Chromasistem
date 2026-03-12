@@ -536,14 +536,14 @@ export function Dashboard() {
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 {bedPreviewData.objects.length > 0 ? (
                   <AlertDialogAction
-                    onClick={() => skipObject(selectedObjectId ?? undefined)}
+                    onClick={() => skipObject(selectedObjectId ?? undefined, bedPreviewData.objects.length)}
                     disabled={selectedObjectId == null}
                     className="bg-amber-600 hover:bg-amber-700"
                   >
                     Pular este objeto
                   </AlertDialogAction>
                 ) : (
-                  <AlertDialogAction onClick={() => skipObject()} className="bg-amber-600 hover:bg-amber-700">
+                  <AlertDialogAction onClick={() => skipObject(undefined, undefined)} className="bg-amber-600 hover:bg-amber-700">
                     Pular item atual
                   </AlertDialogAction>
                 )}

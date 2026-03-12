@@ -205,13 +205,16 @@ export function useDashboard() {
     })
   }
 
-  const skipObject = async (objectId?: number) => {
+  const skipObject = async (objectId?: number, numObjects?: number) => {
     await exec("Pulando objeto…", async () => {
       try {
+        const body: { object_id?: number; num_objects?: number } = {}
+        if (objectId != null) body.object_id = objectId
+        if (numObjects != null && numObjects > 0) body.num_objects = numObjects
         const res = await fetch("/api/printer/skip-object", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(objectId != null ? { object_id: objectId } : {}),
+          body: JSON.stringify(body),
           ...fetchOptions,
         })
         const data = await res.json()

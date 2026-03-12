@@ -285,7 +285,9 @@ def printer_skip_object():
 
     data = request.get_json(silent=True) or {}
     object_id = data.get('object_id')
+    num_objects = data.get('num_objects')
     st.skip_object_id = object_id
+    st.skip_num_objects = int(num_objects) if num_objects is not None and int(num_objects) > 0 else None
     st.skip_requested = True
     st.print_failure_detected = False
     st.current_failure_message = None

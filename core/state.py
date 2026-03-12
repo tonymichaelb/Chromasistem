@@ -26,6 +26,7 @@ current_failure_message = None
 current_failure_code = None
 skip_requested = False
 skip_object_id = None
+skip_num_objects = None  # total de objetos físicos na mesa; usado para pular todas as camadas do objeto
 # Índice 0-based do objeto sendo impresso no momento (para preview da mesa)
 current_print_object_index = None
 
