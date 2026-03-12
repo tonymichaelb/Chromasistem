@@ -14,3 +14,10 @@ slicer_temp/
 .chroma_secret
 app_old.py
 # front-react/
+
+# Túneis remotos (tokens e config não versionados)
+scripts/.cloudflare-token
+scripts/.cloudflare-token.env
+scripts/.ngrok/ngrok.yml
+scripts/.cloudflared/
+scripts/.ngrok/
