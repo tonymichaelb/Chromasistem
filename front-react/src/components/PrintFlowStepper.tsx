@@ -34,7 +34,7 @@ export function PrintFlowStepper() {
                     isActive &&
                       "border-primary bg-primary/10 text-primary dark:bg-primary/20",
                     isCompleted &&
-                      "border-primary/40 bg-primary/10 text-primary/80 dark:border-primary/50 dark:bg-primary/15 dark:text-primary/70",
+                      "border-primary/40 bg-primary/10 text-primary/80 dark:border-primary/50 dark:bg-primary/15 dark:text-white/70",
                     !isActive &&
                       !isCompleted &&
                       "border-border bg-muted/50 text-muted-foreground"
@@ -47,7 +47,7 @@ export function PrintFlowStepper() {
                     "text-[13px] transition-colors",
                     isActive && "font-semibold text-foreground",
                     isCompleted &&
-                      "font-medium text-primary/80 dark:text-primary/70",
+                      "font-medium text-primary/80 dark:text-white/70",
                     !isActive &&
                       !isCompleted &&
                       "text-muted-foreground"

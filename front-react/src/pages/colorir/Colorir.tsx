@@ -4,8 +4,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,15 +15,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { AppHeader } from "@/components/AppHeader"
-import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
-import { cn } from "@/lib/utils"
-import { useColorir, type CmyMix } from "./hook"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { SettingsIcon } from "@hugeicons/core-free-icons"
+} from "@/components/ui/alert-dialog";
+import { AppHeader } from "@/components/AppHeader";
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance";
+import { cn } from "@/lib/utils";
+import { useColorir, type CmyMix } from "./hook";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { SettingsIcon } from "@hugeicons/core-free-icons";
 
-const BRUSH_COUNT = 19
+const BRUSH_COUNT = 19;
 
 export function Colorir() {
   const {
@@ -35,7 +35,7 @@ export function Colorir() {
     setMixtureModalOpen,
     modalSliders,
     modalCustomColor,
-    setModalCustomColor,
+    applyModalCustomColor,
     customColorHex,
     customCmy,
     updateCustomColorFromHex,
@@ -48,21 +48,25 @@ export function Colorir() {
     saveMixtureModal,
     applyCustomColorToBrush,
     TINTA_DEFAULT_COLORS,
-  } = useColorir()
+    modalExtrusorColors,
+    setModalExtrusorColor,
+  } = useColorir();
 
   const currentBrushLabel =
     currentBrushIndex === null
       ? "Nenhum — Clique em um pincel para começar"
       : brushCustomColors[currentBrushIndex]
         ? `Pincel ${currentBrushIndex + 1} — Com cor aplicada`
-        : `Pincel ${currentBrushIndex + 1} — Sem cor (clique em uma tinta para aplicar)`
+        : `Pincel ${currentBrushIndex + 1} — Sem cor (clique em uma tinta para aplicar)`;
 
   return (
     <div className="min-h-screen bg-muted/30">
       <AppHeader />
       <main className="container mx-auto max-w-5xl space-y-6 px-3 py-4 sm:px-4 md:p-6">
         <div>
-          <h1 className="text-xl font-semibold sm:text-2xl">Colorir — Sistema de Pincéis e Tintas</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">
+            Colorir — Sistema de Pincéis e Tintas
+          </h1>
         </div>
 
         {notification && (
@@ -71,8 +75,9 @@ export function Colorir() {
             className={cn(
               "rounded-lg px-4 py-3 text-sm",
               notification.type === "success" && "bg-primary/10 text-primary",
-              notification.type === "error" && "bg-destructive/10 text-destructive",
-              notification.type === "info" && "bg-muted text-muted-foreground"
+              notification.type === "error" &&
+                "bg-destructive/10 text-destructive",
+              notification.type === "info" && "bg-muted text-muted-foreground",
             )}
           >
             {notification.message}
@@ -82,7 +87,8 @@ export function Colorir() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-center font-medium text-muted-foreground">
-              Pincel selecionado: <span className="text-foreground">{currentBrushLabel}</span>
+              Pincel selecionado:{" "}
+              <span className="text-foreground">{currentBrushLabel}</span>
             </p>
           </CardContent>
         </Card>
@@ -94,22 +100,24 @@ export function Colorir() {
           <CardContent>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {Array.from({ length: BRUSH_COUNT }, (_, i) => {
-                const customColor = brushCustomColors[i]
+                const customColor = brushCustomColors[i];
                 return (
                   <Button
                     key={i}
                     variant={currentBrushIndex === i ? "default" : "outline"}
                     className={cn(
                       "flex h-auto flex-col gap-1 py-4 transition-all",
-                      customColor && "border-l-4 border-l-primary"
+                      customColor && "border-l-4 border-l-primary",
                     )}
-                    style={customColor ? { borderLeftColor: customColor } : undefined}
+                    style={
+                      customColor ? { borderLeftColor: customColor } : undefined
+                    }
                     onClick={() => selectBrush(i)}
                   >
                     <span className="text-xl">🖌️</span>
                     <span className="text-xs font-medium">Pincel {i + 1}</span>
                   </Button>
-                )
+                );
               })}
             </div>
           </CardContent>
@@ -122,7 +130,7 @@ export function Colorir() {
           <CardContent>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {Array.from({ length: BRUSH_COUNT }, (_, i) => {
-                const color = tintaCustomColors[i] ?? TINTA_DEFAULT_COLORS[i]
+                const color = tintaCustomColors[i] ?? TINTA_DEFAULT_COLORS[i];
                 return (
                   <div key={i} className="flex flex-col items-center gap-2">
                     <div className="relative w-full">
@@ -138,17 +146,22 @@ export function Colorir() {
                         size="icon-sm"
                         className="absolute right-1 top-1 size-7 rounded-full shadow"
                         onClick={(e) => {
-                          e.stopPropagation()
-                          openMixtureModal(i)
+                          e.stopPropagation();
+                          openMixtureModal(i);
                         }}
                         aria-label={`Configurar mistura tinta ${i + 1}`}
                       >
-                        <HugeiconsIcon icon={SettingsIcon} className="size-3.5" />
+                        <HugeiconsIcon
+                          icon={SettingsIcon}
+                          className="size-3.5"
+                        />
                       </Button>
                     </div>
-                    <span className="text-xs font-medium text-muted-foreground">{i + 1}</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {i + 1}
+                    </span>
                   </div>
-                )
+                );
               })}
             </div>
           </CardContent>
@@ -158,13 +171,16 @@ export function Colorir() {
           <CardHeader>
             <CardTitle>Cor personalizada (100+ cores)</CardTitle>
             <CardDescription>
-              Escolha qualquer cor. O sistema calcula a mistura Ciano/Magenta/Amarelo e aplica ao pincel selecionado.
+              Escolha qualquer cor. O sistema calcula a mistura
+              Ciano/Magenta/Amarelo e aplica ao pincel selecionado.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="shrink-0">
-                <label className="mb-2 block text-sm font-medium">Clique para escolher a cor</label>
+                <label className="mb-2 block text-sm font-medium">
+                  Clique para escolher a cor
+                </label>
                 <div
                   className="size-20 cursor-pointer overflow-hidden rounded-xl border-2 border-border shadow-md"
                   style={{ backgroundColor: customColorHex }}
@@ -184,13 +200,25 @@ export function Colorir() {
                   style={{ backgroundColor: customColorHex }}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Ciano (A): <span className="font-semibold text-foreground">{customCmy.a}%</span>
+                  Ciano (A):{" "}
+                  <span className="font-semibold text-foreground">
+                    {customCmy.a}%
+                  </span>
                   <br />
-                  Magenta (B): <span className="font-semibold text-foreground">{customCmy.b}%</span>
+                  Magenta (B):{" "}
+                  <span className="font-semibold text-foreground">
+                    {customCmy.b}%
+                  </span>
                   <br />
-                  Amarelo (C): <span className="font-semibold text-foreground">{customCmy.c}%</span>
+                  Amarelo (C):{" "}
+                  <span className="font-semibold text-foreground">
+                    {customCmy.c}%
+                  </span>
                 </p>
-                <Button onClick={applyCustomColorToBrush} className="w-full sm:w-auto">
+                <Button
+                  onClick={applyCustomColorToBrush}
+                  className="w-full sm:w-auto"
+                >
                   Aplicar ao pincel atual
                 </Button>
               </div>
@@ -215,25 +243,33 @@ export function Colorir() {
       <AlertDialog open={mixtureModalOpen} onOpenChange={setMixtureModalOpen}>
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Configuração de mistura de cores</AlertDialogTitle>
+            <AlertDialogTitle>
+              Configuração de mistura de cores
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Ajuste as porcentagens de cada filamento. O total deve ser 100%. A prévia mostra a mistura CMY; use o
-              seletor para uma cor RGB personalizada.
+              Ajuste as porcentagens de cada extrusora. O total deve ser 100%. A
+              prévia mostra a mistura; use o seletor para uma cor personalizada.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-2">
-            <SliderRow
-              label="Filamento Ciano"
+            <ModalSliderRow
+              label="Extrusora A"
+              colorHex={modalExtrusorColors.a}
+              onColorChange={(hex) => setModalExtrusorColor("a", hex)}
               value={modalSliders.a}
               onChange={(v) => updateModalSlider("a", v)}
             />
-            <SliderRow
-              label="Filamento Magenta"
+            <ModalSliderRow
+              label="Extrusora B"
+              colorHex={modalExtrusorColors.b}
+              onColorChange={(hex) => setModalExtrusorColor("b", hex)}
               value={modalSliders.b}
               onChange={(v) => updateModalSlider("b", v)}
             />
-            <SliderRow
-              label="Filamento Amarelo"
+            <ModalSliderRow
+              label="Extrusora C"
+              colorHex={modalExtrusorColors.c}
+              onColorChange={(hex) => setModalExtrusorColor("c", hex)}
               value={modalSliders.c}
               onChange={(v) => updateModalSlider("c", v)}
             />
@@ -242,16 +278,23 @@ export function Colorir() {
             </div>
             <div className="flex flex-wrap justify-center gap-6">
               <div className="flex flex-col items-center gap-1">
-                <span className="text-xs font-medium text-muted-foreground">Prévia da mistura</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  Prévia da mistura
+                </span>
                 <div
                   className="size-16 rounded-full border-2 border-border shadow"
                   style={{
-                    backgroundColor: cmyToRgbHex(modalSliders),
+                    backgroundColor: blendExtrusorColors(
+                      modalSliders,
+                      modalExtrusorColors,
+                    ),
                   }}
                 />
               </div>
               <div className="flex flex-col items-center gap-1">
-                <span className="text-xs font-medium text-muted-foreground">Cor personalizada</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  Cor personalizada
+                </span>
                 <div className="relative size-16 rounded-full border-2 border-border shadow">
                   <div
                     className="absolute inset-0 rounded-full"
@@ -260,7 +303,7 @@ export function Colorir() {
                   <input
                     type="color"
                     value={modalCustomColor}
-                    onChange={(e) => setModalCustomColor(e.target.value)}
+                    onChange={(e) => applyModalCustomColor(e.target.value)}
                     className="absolute inset-0 size-full cursor-pointer rounded-full opacity-0"
                   />
                 </div>
@@ -269,7 +312,9 @@ export function Colorir() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={saveMixtureModal}>Salvar</AlertDialogAction>
+            <AlertDialogAction onClick={saveMixtureModal}>
+              Salvar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -282,55 +327,79 @@ export function Colorir() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-left text-foreground">
                 <p>
-                  <strong>Bem-vindo ao Sistema de Pincéis e Tintas!</strong> Siga os passos abaixo:
+                  <strong>Bem-vindo ao Sistema de Pincéis e Tintas!</strong>{" "}
+                  Siga os passos abaixo:
                 </p>
                 <ol className="list-inside list-decimal space-y-2">
                   <li>
-                    <strong>Escolha um pincel:</strong> Clique em um dos 19 pincéis. Cada um representa uma ferramenta
-                    de impressão.
+                    <strong>Escolha um pincel:</strong> Clique em um dos 19
+                    pincéis. Cada um representa uma ferramenta de impressão.
                   </li>
                   <li>
-                    <strong>Selecione uma tinta:</strong> Depois de escolher o pincel, clique em uma das 19 tintas
-                    para aplicar a cor.
+                    <strong>Selecione uma tinta:</strong> Depois de escolher o
+                    pincel, clique em uma das 19 tintas para aplicar a cor.
                   </li>
                   <li>
-                    <strong>Personalize a mistura (opcional):</strong> Clique na engrenagem em qualquer tinta para
-                    ajustar Ciano, Magenta e Amarelo ou escolher uma cor RGB.
+                    <strong>Personalize a mistura (opcional):</strong> Clique na
+                    engrenagem em qualquer tinta para ajustar Ciano, Magenta e
+                    Amarelo ou escolher uma cor RGB.
                   </li>
                   <li>
-                    <strong>Cor personalizada:</strong> Na seção abaixo, escolha qualquer cor no seletor e aplique ao
-                    pincel atual.
+                    <strong>Cor personalizada:</strong> Na seção abaixo, escolha
+                    qualquer cor no seletor e aplique ao pincel atual.
                   </li>
                 </ol>
                 <div className="rounded-lg border-l-4 border-amber-500 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-                  <strong>Dica:</strong> As configurações são salvas automaticamente no servidor.
+                  <strong>Dica:</strong> As configurações são salvas
+                  automaticamente no servidor.
                 </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setHelpOpen(false)}>Entendi</AlertDialogAction>
+            <AlertDialogAction onClick={() => setHelpOpen(false)}>
+              Entendi
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }
 
-function SliderRow({
+function ModalSliderRow({
   label,
+  colorHex,
+  onColorChange,
   value,
   onChange,
 }: {
-  label: string
-  value: number
-  onChange: (v: number) => void
+  label: string;
+  colorHex: string;
+  onColorChange: (hex: string) => void;
+  value: number;
+  onChange: (v: number) => void;
 }) {
   return (
     <div>
-      <div className="mb-1 flex justify-between text-sm font-medium">
-        <span>{label}</span>
-        <span className="text-primary">{value}%</span>
+      <div className="mb-1 flex items-center justify-between text-sm font-medium">
+        <div className="flex items-center gap-2">
+          <span>{label}</span>
+          <label className="relative flex shrink-0 cursor-pointer">
+            <span
+              className="block size-6 rounded-full border-2 border-white shadow-md ring-2 ring-primary/20 transition hover:ring-primary/50"
+              style={{ backgroundColor: colorHex }}
+            />
+            <input
+              type="color"
+              value={colorHex}
+              onChange={(e) => onColorChange(e.target.value)}
+              className="absolute inset-0 size-full cursor-pointer rounded-full opacity-0"
+              aria-label={`Cor da ${label}`}
+            />
+          </label>
+        </div>
+        <span className="text-primary dark:text-white">{value}%</span>
       </div>
       <input
         type="range"
@@ -341,17 +410,32 @@ function SliderRow({
         className="w-full accent-primary"
       />
     </div>
-  )
+  );
 }
 
-function cmyToRgbHex(mix: CmyMix): string {
-  const total = mix.a + mix.b + mix.c
-  if (total <= 0) return "#808080"
-  const c = mix.a / total
-  const m = mix.b / total
-  const y = mix.c / total
-  const r = Math.min(255, Math.round(255 * (m + y)))
-  const g = Math.min(255, Math.round(255 * (c + y)))
-  const b = Math.min(255, Math.round(255 * (c + m)))
-  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+/** Mistura as cores das três extrusoras conforme as porcentagens (total 100%). */
+function blendExtrusorColors(
+  mix: CmyMix,
+  colors: { a: string; b: string; c: string },
+): string {
+  const total = mix.a + mix.b + mix.c;
+  if (total <= 0) return "#808080";
+  const rgbA = hexToRgb(colors.a);
+  const rgbB = hexToRgb(colors.b);
+  const rgbC = hexToRgb(colors.c);
+  const r = Math.round(
+    (rgbA.r * mix.a + rgbB.r * mix.b + rgbC.r * mix.c) / total,
+  );
+  const g = Math.round(
+    (rgbA.g * mix.a + rgbB.g * mix.b + rgbC.g * mix.c) / total,
+  );
+  const b = Math.round(
+    (rgbA.b * mix.a + rgbB.b * mix.b + rgbC.b * mix.c) / total,
+  );
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
 }

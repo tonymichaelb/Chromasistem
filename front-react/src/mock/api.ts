@@ -22,7 +22,7 @@ function getPath(url: string): string {
 /** Status mock padrão: impressora conectada e ociosa — passo a passo liberado sem precisar inserir dados (MOCK=true). */
 const defaultPrinterStatus = {
   connected: true,
-  state: "idle" as const,
+  state: "printing" as const,
   temperature: {
     nozzle: 22,
     bed: 25,
@@ -30,7 +30,7 @@ const defaultPrinterStatus = {
     target_bed: 0,
   },
   filename: "",
-  progress: 0,
+  progress: 10,
   time_elapsed: "00:00:00",
   time_remaining: "00:00:00",
   filament: { sensor_enabled: false },

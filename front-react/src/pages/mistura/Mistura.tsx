@@ -4,21 +4,21 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { AppHeader } from "@/components/AppHeader"
-import { PrintFlowAdvance } from "@/components/PrintFlowAdvance"
-import { cn } from "@/lib/utils"
-import { useMistura } from "./hook"
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { AppHeader } from "@/components/AppHeader";
+import { PrintFlowAdvance } from "@/components/PrintFlowAdvance";
+import { cn } from "@/lib/utils";
+import { useMistura } from "./hook";
 
 function SliderRow({
   label,
   value,
   onChange,
 }: {
-  label: string
-  value: number
-  onChange: (v: number) => void
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
 }) {
   return (
     <div>
@@ -35,13 +35,44 @@ function SliderRow({
         className="w-full accent-primary"
       />
     </div>
-  )
+  );
+}
+
+function ExtrusorTitle({
+  label,
+  colorHex,
+  onColorChange,
+}: {
+  label: string;
+  colorHex: string;
+  onColorChange: (hex: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span>{label}</span>
+      <label className="relative flex shrink-0 cursor-pointer">
+        <span
+          className="block size-6 rounded-full border-2 border-white shadow-md ring-2 ring-primary/20 transition hover:ring-primary/50"
+          style={{ backgroundColor: colorHex }}
+        />
+        <input
+          type="color"
+          value={colorHex}
+          onChange={(e) => onColorChange(e.target.value)}
+          className="absolute inset-0 size-full cursor-pointer rounded-full opacity-0"
+          aria-label={`Cor da ${label}`}
+        />
+      </label>
+    </div>
+  );
 }
 
 export function Mistura() {
   const {
     mix,
     suggestColorHex,
+    extrusorColors,
+    setExtrusorColor,
     notification,
     sending,
     isValid,
@@ -49,15 +80,19 @@ export function Mistura() {
     updateSlider,
     applySuggestColor,
     sendMixture,
-  } = useMistura()
+  } = useMistura();
 
   return (
     <div className="min-h-screen bg-muted/30">
       <AppHeader />
       <main className="container mx-auto max-w-2xl space-y-6 px-3 py-4 sm:px-4 md:p-6">
         <div>
-          <h1 className="text-xl font-semibold sm:text-2xl">Mistura de filamentos</h1>
-          <p className="text-muted-foreground">Ajuste a proporção de cada filamento. A soma deve ser 100%.</p>
+          <h1 className="text-xl font-semibold sm:text-2xl">
+            Mistura de filamentos
+          </h1>
+          <p className="text-muted-foreground">
+            Ajuste a proporção de cada filamento. A soma deve ser 100%.
+          </p>
         </div>
 
         <Card className="border-l-4 border-l-primary">
@@ -65,17 +100,20 @@ export function Mistura() {
             <p className="text-sm">
               <strong>Comando:</strong> M182 A[%] B[%] C[%]
               <br />
-              Filamento A (Extrusora 1) • Filamento B (Extrusora 2) • Filamento C (Extrusora 3)
+              Extrusora A • Extrusora B • Extrusora C
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-primary">
           <CardHeader>
-            <CardTitle className="text-base">Sugerir mistura a partir de uma cor</CardTitle>
+            <CardTitle className="text-base">
+              Sugerir mistura a partir de uma cor
+            </CardTitle>
             <CardDescription>
-              Escolha uma cor para preencher os percentuais automaticamente. Tons mais escuros tendem a uma mistura
-              mais neutra; tons mais claros, ao matiz da cor. Ajuste os sliders se quiser e envie.
+              Escolha uma cor para preencher os percentuais automaticamente.
+              Tons mais escuros tendem a uma mistura mais neutra; tons mais
+              claros, ao matiz da cor. Ajuste os sliders se quiser e envie.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -93,7 +131,8 @@ export function Mistura() {
                 />
               </div>
               <span className="min-w-0 text-sm text-muted-foreground">
-                Clique no quadrado para escolher uma cor e preencher Ciano/Magenta/Amarelo.
+                Clique no quadrado para escolher uma cor e preencher as
+                proporções das extrusoras.
               </span>
             </div>
           </CardContent>
@@ -102,26 +141,56 @@ export function Mistura() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Filamento A (Extrusora 1)</CardTitle>
+              <CardTitle className="text-base">
+                <ExtrusorTitle
+                  label="Extrusora A"
+                  colorHex={extrusorColors.a}
+                  onColorChange={(hex) => setExtrusorColor("a", hex)}
+                />
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <SliderRow label="" value={mix.a} onChange={(v) => updateSlider("a", v)} />
+              <SliderRow
+                label=""
+                value={mix.a}
+                onChange={(v) => updateSlider("a", v)}
+              />
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Filamento B (Extrusora 2)</CardTitle>
+              <CardTitle className="text-base">
+                <ExtrusorTitle
+                  label="Extrusora B"
+                  colorHex={extrusorColors.b}
+                  onColorChange={(hex) => setExtrusorColor("b", hex)}
+                />
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <SliderRow label="" value={mix.b} onChange={(v) => updateSlider("b", v)} />
+              <SliderRow
+                label=""
+                value={mix.b}
+                onChange={(v) => updateSlider("b", v)}
+              />
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Filamento C (Extrusora 3)</CardTitle>
+              <CardTitle className="text-base">
+                <ExtrusorTitle
+                  label="Extrusora C"
+                  colorHex={extrusorColors.c}
+                  onColorChange={(hex) => setExtrusorColor("c", hex)}
+                />
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <SliderRow label="" value={mix.c} onChange={(v) => updateSlider("c", v)} />
+              <SliderRow
+                label=""
+                value={mix.c}
+                onChange={(v) => updateSlider("c", v)}
+              />
             </CardContent>
           </Card>
         </div>
@@ -129,12 +198,19 @@ export function Mistura() {
         <Card
           className={cn(
             "text-center",
-            isValid ? "border-2 border-primary/30 bg-primary/5" : "border-2 border-destructive/30 bg-destructive/5"
+            isValid
+              ? "border-2 border-primary/30 bg-primary/5"
+              : "border-2 border-destructive/30 bg-destructive/5",
           )}
         >
           <CardContent className="pt-6">
             <p className="text-sm font-medium text-muted-foreground">Total</p>
-            <p className={cn("text-2xl font-bold", isValid ? "text-primary" : "text-destructive")}>
+            <p
+              className={cn(
+                "text-2xl font-bold",
+                isValid ? "text-primary" : "text-destructive",
+              )}
+            >
               {mix.a + mix.b + mix.c}%
             </p>
           </CardContent>
@@ -142,7 +218,9 @@ export function Mistura() {
 
         <Card>
           <CardContent className="pt-6">
-            <p className="mb-1 text-sm font-medium text-muted-foreground">Comando a enviar</p>
+            <p className="mb-1 text-sm font-medium text-muted-foreground">
+              Comando a enviar
+            </p>
             <code className="block break-all rounded-lg bg-muted px-3 py-2 font-mono text-sm">
               {commandPreview}
             </code>
@@ -163,8 +241,9 @@ export function Mistura() {
             className={cn(
               "rounded-lg px-4 py-3 text-sm",
               notification.type === "success" && "bg-primary/10 text-primary",
-              notification.type === "error" && "bg-destructive/10 text-destructive",
-              notification.type === "info" && "bg-muted text-muted-foreground"
+              notification.type === "error" &&
+                "bg-destructive/10 text-destructive",
+              notification.type === "info" && "bg-muted text-muted-foreground",
             )}
           >
             {notification.message}
@@ -174,5 +253,5 @@ export function Mistura() {
         <PrintFlowAdvance />
       </main>
     </div>
-  )
+  );
 }

@@ -35,9 +35,76 @@ export interface CmyMix {
 
 const defaultMixture = (): CmyMix => ({ a: 33, b: 33, c: 34 })
 
+const defaultExtrusorColors = {
+  a: "#00CED1",
+  b: "#DC143C",
+  c: "#FFD700",
+} as const
+
+export type ExtrusorColors = { a: string; b: string; c: string }
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const n = parseInt(hex.slice(1), 16)
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+/**
+ * Calcula as porcentagens (a, b, c) para que a mistura das três cores das extrusoras
+ * fique o mais próximo possível da cor alvo (inverse blending).
+ */
+function targetHexToMix(
+  targetHex: string,
+  colors: { a: string; b: string; c: string }
+): CmyMix {
+  const t = hexToRgb(targetHex)
+  const A = hexToRgb(colors.a)
+  const B = hexToRgb(colors.b)
+  const C = hexToRgb(colors.c)
+  const b = [100 * t.r, 100 * t.g, 100 * t.b]
+  const rA = A.r, rB = B.r, rC = C.r
+  const gA = A.g, gB = B.g, gC = C.g
+  const bA = A.b, bB = B.b, bC = C.b
+  const det = rA * (gB * bC - gC * bB) - rB * (gA * bC - gC * bA) + rC * (gA * bB - gB * bA)
+  if (Math.abs(det) < 1e-6) return { a: 33, b: 33, c: 34 }
+  const wA = (b[0] * (gB * bC - gC * bB) - rB * (b[1] * bC - b[2] * gC) + rC * (b[1] * bB - b[2] * gB)) / det
+  const wB = (rA * (b[1] * bC - b[2] * gC) - b[0] * (gA * bC - gC * bA) + rC * (gA * b[2] - b[1] * bA)) / det
+  const wC = (rA * (gB * b[2] - b[1] * bB) - rB * (gA * b[2] - b[1] * bA) + b[0] * (gA * bB - gB * bA)) / det
+  let wa = Math.max(0, Math.min(100, wA))
+  let wb = Math.max(0, Math.min(100, wB))
+  let wc = Math.max(0, Math.min(100, wC))
+  const sum = wa + wb + wc
+  if (sum <= 0) return { a: 33, b: 33, c: 34 }
+  wa = (wa * 100) / sum
+  wb = (wb * 100) / sum
+  wc = (wc * 100) / sum
+  let a = Math.round(wa), b_ = Math.round(wb), c = Math.round(wc)
+  const total = a + b_ + c
+  if (total !== 100) {
+    const diff = 100 - total
+    if (diff > 0 && a < 100) a = Math.min(100, a + diff)
+    else if (diff > 0 && b_ < 100) b_ = Math.min(100, b_ + diff)
+    else if (diff > 0 && c < 100) c = Math.min(100, c + diff)
+    else if (diff < 0 && a > 0) a = Math.max(0, a + diff)
+    else if (diff < 0 && b_ > 0) b_ = Math.max(0, b_ + diff)
+    else if (diff < 0 && c > 0) c = Math.max(0, c + diff)
+  }
+  return { a: Math.max(0, Math.min(100, a)), b: Math.max(0, Math.min(100, b_)), c: Math.max(0, Math.min(100, c)) }
+}
+
+/** Retorna o hex da mistura das três cores pelas porcentagens (total 100%). */
+function blendExtrusorColorsHex(
+  mix: CmyMix,
+  colors: { a: string; b: string; c: string }
+): string {
+  const total = mix.a + mix.b + mix.c
+  if (total <= 0) return "#808080"
+  const A = hexToRgb(colors.a)
+  const B = hexToRgb(colors.b)
+  const C = hexToRgb(colors.c)
+  const r = Math.round((A.r * mix.a + B.r * mix.b + C.r * mix.c) / total)
+  const g = Math.round((A.g * mix.a + B.g * mix.b + C.g * mix.c) / total)
+  const b = Math.round((A.b * mix.a + B.b * mix.b + C.b * mix.c) / total)
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`
 }
 
 function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
@@ -137,6 +204,7 @@ export function useColorir() {
   const [mixtureModalOpen, setMixtureModalOpen] = useState(false)
   const [editingTintaIndex, setEditingTintaIndex] = useState<number | null>(null)
   const [modalSliders, setModalSliders] = useState<CmyMix>(defaultMixture())
+  const [modalExtrusorColors, setModalExtrusorColors] = useState<ExtrusorColors>(defaultExtrusorColors)
   const [modalCustomColor, setModalCustomColor] = useState("#808080")
   const [customColorHex, setCustomColorHex] = useState("#808080")
   const [customCmy, setCustomCmy] = useState<CmyMix>(() => {
@@ -339,11 +407,35 @@ export function useColorir() {
     return { [changedKey]: clamped, [o1]: v1, [o2]: v2 } as unknown as CmyMix
   }, [])
 
+  /** Ao alterar um slider, a cor personalizada passa a ser a prévia da mistura (tudo sincronizado). */
   const updateModalSlider = useCallback(
     (key: "a" | "b" | "c", value: number) => {
-      setModalSliders((prev) => distributePercentages(prev, key, value))
+      const next = distributePercentages(modalSliders, key, value)
+      setModalSliders(next)
+      setModalCustomColor(blendExtrusorColorsHex(next, modalExtrusorColors))
     },
-    [distributePercentages]
+    [modalSliders, modalExtrusorColors, distributePercentages]
+  )
+
+  /** Ao alterar a cor de uma extrusora, atualiza as porcentagens para a prévia continuar igual à cor personalizada. */
+  const setModalExtrusorColor = useCallback(
+    (key: "a" | "b" | "c", hex: string) => {
+      const newColors = { ...modalExtrusorColors, [key]: hex }
+      setModalExtrusorColors(newColors)
+      const mix = targetHexToMix(modalCustomColor, newColors)
+      setModalSliders(mix)
+    },
+    [modalExtrusorColors, modalCustomColor]
+  )
+
+  /** Ao alterar a cor personalizada no modal, calcula as porcentagens a partir das cores reais das extrusoras. */
+  const applyModalCustomColor = useCallback(
+    (hex: string) => {
+      setModalCustomColor(hex)
+      const mix = targetHexToMix(hex, modalExtrusorColors)
+      setModalSliders(mix)
+    },
+    [modalExtrusorColors]
   )
 
   const saveMixtureModal = useCallback(() => {
@@ -397,8 +489,11 @@ export function useColorir() {
     editingTintaIndex,
     modalSliders,
     setModalSliders,
+    modalExtrusorColors,
+    setModalExtrusorColor,
     modalCustomColor,
     setModalCustomColor,
+    applyModalCustomColor,
     customColorHex,
     setCustomColorHex,
     customCmy,

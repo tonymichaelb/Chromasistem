@@ -4,6 +4,8 @@
     box-sizing: border-box;
 }
 
+
+
 :root {
     --primary-color: #2563eb;
     --secondary-color: #64748b;
@@ -16,6 +18,7 @@
     --text-primary: #f1f5f9;
     --text-secondary: #cbd5e1;
     --border-color: #334155;
+    
 }
 
 body {
