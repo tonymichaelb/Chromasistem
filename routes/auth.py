@@ -46,16 +46,11 @@ def api_register():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute('SELECT COUNT(*) FROM users')
-    user_count = cursor.fetchone()[0]
-
-    if user_count > 0:
-        conn.close()
-        return jsonify({'success': False, 'message': 'Registro não permitido. Use uma conta existente.'}), 403
-
     try:
-        cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)',
-                       (username, hash_password(password)))
+        cursor.execute(
+            'INSERT INTO users (username, password) VALUES (?, ?)',
+            (username, hash_password(password))
+        )
         conn.commit()
         user_id = cursor.lastrowid
         session['user_id'] = user_id

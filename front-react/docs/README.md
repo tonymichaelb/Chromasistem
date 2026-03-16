@@ -1,6 +1,6 @@
-# Documentação — Croma Frontend React
+# Documentação — Chroma Frontend React
 
-Documentação para desenvolvedores que vão manter ou estender o frontend do Croma.
+Documentação para desenvolvedores que vão manter ou estender o frontend do Chroma.
 
 ## Índice
 

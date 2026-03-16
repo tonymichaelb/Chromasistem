@@ -47,7 +47,7 @@ export function Login() {
               className="h-14 w-auto object-contain dark:invert"
             />
           </div>
-          <CardTitle className="text-2xl">Croma</CardTitle>
+          <CardTitle className="text-2xl">Chroma</CardTitle>
           <CardDescription>
             Sistema de Monitoramento de Impressora 3D
           </CardDescription>

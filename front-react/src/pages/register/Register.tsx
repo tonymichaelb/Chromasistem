@@ -50,7 +50,7 @@ export function Register() {
             />
           </div>
           <CardTitle className="text-2xl">Criar Conta</CardTitle>
-          <CardDescription>Sistema Croma</CardDescription>
+          <CardDescription>Sistema Chroma</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4 pb-6">

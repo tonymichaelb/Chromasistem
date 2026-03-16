@@ -138,7 +138,7 @@ export function AppHeader({
             alt="Croma"
             className="h-7 w-auto object-contain dark:invert sm:h-8"
           />
-          <span className="font-semibold text-sm sm:text-base">Croma</span>
+          <span className="font-semibold text-sm sm:text-base">Chroma</span>
         </Link>
 
         {/* Desktop nav */}

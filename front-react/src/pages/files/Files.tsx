@@ -318,7 +318,7 @@ export function Files() {
           <CardHeader>
             <CardTitle>Integração com OrcaSlicer</CardTitle>
             <CardDescription>
-              Configure o OrcaSlicer para enviar arquivos diretamente para o Croma:
+              Configure o OrcaSlicer para enviar arquivos diretamente para o Chroma:
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

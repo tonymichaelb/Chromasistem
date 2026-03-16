@@ -122,7 +122,8 @@ export function BedPreviewCanvas({
             const pos = positions[i]
             if (!pos) return null
             const selected = selectedObjectId === obj.id
-            const isPrinting = currentObjectIndex != null && currentObjectIndex === obj.id
+            // currentObjectIndex é um índice (posição na lista), não o id do objeto
+            const isPrinting = currentObjectIndex != null && currentObjectIndex === i
             return (
               <Rect
                 key={obj.id}
