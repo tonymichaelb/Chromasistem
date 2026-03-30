@@ -15,6 +15,7 @@ HOTSPOT_PASSWORD = "croma1234"
 HOTSPOT_IP = "10.0.0.1"
 CHECK_INTERVAL = 30  # segundos
 
+
 def run_command(cmd):
     """Executa comando shell"""
     try:
@@ -22,6 +23,33 @@ def run_command(cmd):
         return result.returncode == 0, result.stdout, result.stderr
     except Exception as e:
         return False, "", str(e)
+
+
+def get_wifi_iface():
+    """Interface Wi-Fi para AP (env WIFI_IFACE ou primeira detectada)."""
+    env = os.environ.get("WIFI_IFACE", "").strip()
+    if env:
+        return env
+    success, output, _ = run_command("iw dev")
+    if success and output:
+        for line in output.splitlines():
+            line = line.strip()
+            if line.startswith("Interface "):
+                return line.split()[1]
+    success, output, _ = run_command("nmcli -t -f DEVICE,TYPE device status")
+    if success and output:
+        for line in output.strip().split("\n"):
+            if not line:
+                continue
+            if line.endswith(":wifi"):
+                return line.rsplit(":", 1)[0]
+    return "wlan0"
+
+
+def hotspot_country_code():
+    """ISO 3166-1 alpha-2 — necessário para hostapd em várias regiões."""
+    cc = os.environ.get("WIFI_COUNTRY", "BR").strip().upper()[:2]
+    return cc if cc else "BR"
 
 def check_internet():
     """Verifica se há conexão com internet"""
@@ -40,19 +68,26 @@ def get_current_ssid():
 
 def start_hotspot():
     """Inicia o hotspot"""
-    print("Iniciando hotspot...")
-    
+    iface = get_wifi_iface()
+    country = hotspot_country_code()
+    print(f"Iniciando hotspot em {iface} (país/regulatório: {country})...")
+
+    # Evita conflito com dnsmasq do systemd (mesma porta / interface).
+    run_command("sudo systemctl stop dnsmasq 2>/dev/null")
     # Parar NetworkManager
     run_command("sudo systemctl stop NetworkManager")
-    
-    # Configurar IP estático para wlan0
-    run_command("sudo ip addr flush dev wlan0")
-    run_command(f"sudo ip addr add {HOTSPOT_IP}/24 dev wlan0")
-    run_command("sudo ip link set wlan0 up")
-    
+
+    run_command(f"sudo iw reg set {country}")
+
+    # Configurar IP estático na interface Wi-Fi
+    run_command(f"sudo ip addr flush dev {iface}")
+    run_command(f"sudo ip addr add {HOTSPOT_IP}/24 dev {iface}")
+    run_command(f"sudo ip link set {iface} up")
+
     # Criar arquivo de configuração do hostapd
-    hostapd_conf = f"""interface=wlan0
+    hostapd_conf = f"""interface={iface}
 driver=nl80211
+country_code={country}
 ssid={HOTSPOT_SSID}
 hw_mode=g
 channel=7
@@ -66,49 +101,58 @@ wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
 """
-    
-    with open('/tmp/hostapd.conf', 'w') as f:
+
+    with open("/tmp/hostapd.conf", "w") as f:
         f.write(hostapd_conf)
-    
-    # Configurar dnsmasq (DHCP)
-    dnsmasq_conf = f"""interface=wlan0
+
+    # Configurar dnsmasq (DHCP) — bind só nesta interface
+    dnsmasq_conf = f"""bind-interfaces
+interface={iface}
+except-interface=lo
 dhcp-range=10.0.0.10,10.0.0.50,255.255.255.0,24h
 domain=local
 address=/croma.local/{HOTSPOT_IP}
 """
-    
-    with open('/tmp/dnsmasq.conf', 'w') as f:
+
+    with open("/tmp/dnsmasq.conf", "w") as f:
         f.write(dnsmasq_conf)
-    
+
     # Parar serviços existentes
     run_command("sudo killall hostapd 2>/dev/null")
     run_command("sudo killall dnsmasq 2>/dev/null")
-    
-    # Iniciar dnsmasq
-    run_command("sudo dnsmasq -C /tmp/dnsmasq.conf")
-    
+
+    # Iniciar dnsmasq (instância dedicada ao hotspot)
+    ok_dns, _, err_dns = run_command("sudo dnsmasq -C /tmp/dnsmasq.conf")
+    if not ok_dns:
+        print(f"✗ Erro ao iniciar dnsmasq: {err_dns}")
+        run_command("sudo killall hostapd 2>/dev/null")
+        return False
+
     # Iniciar hostapd
-    success, _, error = run_command("sudo hostapd /tmp/hostapd.conf -B")
-    
+    success, out, error = run_command("sudo hostapd /tmp/hostapd.conf -B")
+    if not success:
+        combined = (error or "") + (out or "")
+        print(f"✗ Erro ao iniciar hostapd: {combined.strip() or 'sem stderr'}")
+        run_command("sudo killall dnsmasq 2>/dev/null")
+
     if success:
         print(f"✓ Hotspot iniciado: {HOTSPOT_SSID}")
         print(f"  Senha: {HOTSPOT_PASSWORD}")
         print(f"  IP: {HOTSPOT_IP}")
-        print(f"  Acesse: http://{HOTSPOT_IP}:8080")
+        print(f"  Acesse: http://{HOTSPOT_IP}/ (porta 80 se PORT não definido no app)")
         return True
-    else:
-        print(f"✗ Erro ao iniciar hotspot: {error}")
-        return False
+    return False
 
 def stop_hotspot():
     """Para o hotspot"""
+    iface = get_wifi_iface()
     print("Parando hotspot...")
-    
+
     run_command("sudo killall hostapd 2>/dev/null")
     run_command("sudo killall dnsmasq 2>/dev/null")
-    run_command("sudo ip addr flush dev wlan0")
+    run_command(f"sudo ip addr flush dev {iface}")
     run_command("sudo systemctl start NetworkManager")
-    
+
     print("✓ Hotspot parado")
 
 def connect_wifi(ssid, password):
