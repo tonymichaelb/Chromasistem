@@ -222,7 +222,7 @@ TEMP_REHEAT_MARGIN = 5
 # ---------------------------------------------------------------------------
 # Serial
 # ---------------------------------------------------------------------------
-SERIAL_PORT = '/dev/ttyACM1'
+SERIAL_PORT = '/dev/ttyACM0'
 SERIAL_BAUDRATE = 115200
 SERIAL_TIMEOUT = 2
 
