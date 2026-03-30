@@ -241,22 +241,37 @@
             }
         }
 
-        // Escanear redes
+        // Escanear redes (refresh=1 derruba o AP ~20–40 s; depois reconecte em Croma-3D-Printer)
         async function scanNetworks() {
-            document.getElementById('availableNetworks').innerHTML = 
-                '<p style="text-align: center;">🔄 Escaneando redes...</p>';
-            
+            document.getElementById('availableNetworks').innerHTML =
+                '<p style="text-align: center;">🔄 Buscando redes… reconecte em "Croma-3D-Printer" se o Wi-Fi cair.</p>';
+
             try {
-                const response = await fetch('/api/wifi/scan');
-                const data = await response.json();
-                
-                if (data.success && data.networks.length > 0) {
+                const startRes = await fetch('/api/wifi/scan?refresh=1');
+                const start = await startRes.json();
+                if (!start.success) {
+                    document.getElementById('availableNetworks').innerHTML =
+                        '<p style="text-align: center; color: #ff5252;">Não foi possível iniciar a busca</p>';
+                    return;
+                }
+                const deadline = Date.now() + 90000;
+                let found = [];
+                while (Date.now() < deadline) {
+                    await new Promise(r => setTimeout(r, 2500));
+                    const res = await fetch('/api/wifi/scan');
+                    const data = await res.json();
+                    if (data.success && data.networks && data.networks.length > 0) {
+                        found = data.networks;
+                        break;
+                    }
+                }
+                if (found.length > 0) {
                     let html = '';
-                    data.networks.forEach(network => {
+                    found.forEach(network => {
                         const signalIcon = getSignalIcon(network.signal);
                         const isConnected = network.ssid === currentSSID;
                         const lockIcon = network.security !== 'Aberta' ? '🔒' : '';
-                        
+                        const safeSsid = String(network.ssid).replace(/'/g, "\\'");
                         html += `
                             <div class="wifi-network ${isConnected ? 'connected' : ''}">
                                 <div class="wifi-signal">${signalIcon}</div>
@@ -270,19 +285,19 @@
                                     </div>
                                 </div>
                                 <div class="wifi-actions">
-                                    ${!isConnected ? `<button class="btn btn-primary btn-sm" onclick="showConnectModal('${network.ssid}')">Conectar</button>` : ''}
+                                    ${!isConnected ? `<button class="btn btn-primary btn-sm" onclick="showConnectModal('${safeSsid}')">Conectar</button>` : ''}
                                 </div>
                             </div>
                         `;
                     });
                     document.getElementById('availableNetworks').innerHTML = html;
                 } else {
-                    document.getElementById('availableNetworks').innerHTML = 
-                        '<p style="text-align: center; color: rgba(255,255,255,0.6);">Nenhuma rede encontrada</p>';
+                    document.getElementById('availableNetworks').innerHTML =
+                        '<p style="text-align: center; color: rgba(255,255,255,0.6);">Nenhuma rede encontrada. Reconecte em Croma-3D-Printer e tente Atualizar de novo.</p>';
                 }
             } catch (error) {
                 console.error('Erro ao escanear redes:', error);
-                document.getElementById('availableNetworks').innerHTML = 
+                document.getElementById('availableNetworks').innerHTML =
                     '<p style="text-align: center; color: #ff5252;">Erro ao escanear redes</p>';
             }
         }

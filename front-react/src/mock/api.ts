@@ -93,13 +93,13 @@ export function getMockResponse(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Response | null {
-  const path = getPath(
+  const rawUrl =
     typeof input === "string"
       ? input
       : input instanceof URL
         ? input.href
-        : input.url,
-  );
+        : input.url;
+  const path = getPath(rawUrl);
   const method = (init?.method ?? "GET").toUpperCase();
 
   // Auth
@@ -225,8 +225,21 @@ export function getMockResponse(
     });
   if (path === "/api/wifi/saved")
     return jsonResponse({ success: true, networks: ["Rede-Mock-1"] });
-  if (path === "/api/wifi/scan")
-    return jsonResponse({ success: true, networks: wifiNetworksMock });
+  if (path === "/api/wifi/scan") {
+    if (rawUrl.includes("refresh=1")) {
+      return jsonResponse({
+        success: true,
+        pending: true,
+        message:
+          'O Wi-Fi da impressora será reiniciado por cerca de 20–40 s. Reconecte à rede "Croma-3D-Printer" e aguarde a lista aparecer.',
+      });
+    }
+    return jsonResponse({
+      success: true,
+      networks: wifiNetworksMock,
+      from_cache: true,
+    });
+  }
   if (path === "/api/wifi/connect" && method === "POST")
     return jsonResponse({ success: true });
   if (path === "/api/wifi/forget" && method === "POST")

@@ -1,38 +1,90 @@
 """WiFi configuration API routes."""
 
-from flask import Blueprint, request, jsonify, session
+import json
+import pathlib
 import subprocess
+import threading
+
+from flask import Blueprint, jsonify, request, session
 
 wifi_bp = Blueprint('wifi_api', __name__)
+
+_PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+_WIFI_MANAGER = _PROJECT_ROOT / "wifi_manager.py"
+_CACHE_PATH = pathlib.Path("/run/chromasistem-wifi-cache.json")
+_SCAN_LOCK = threading.Lock()
+
+
+def _read_wifi_cache():
+    try:
+        with open(_CACHE_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        nets = data.get("networks") or []
+        ts = data.get("ts")
+        err = data.get("error")
+        return nets, ts, err
+    except (OSError, json.JSONDecodeError, TypeError):
+        return [], None, None
+
+
+def _run_scan_cache_subprocess():
+    subprocess.run(
+        [
+            "sudo",
+            "/usr/bin/python3",
+            str(_WIFI_MANAGER),
+            "scan-cache",
+        ],
+        cwd=str(_PROJECT_ROOT),
+        timeout=120,
+        check=False,
+    )
 
 
 @wifi_bp.route('/api/wifi/scan', methods=['GET'])
 def wifi_scan():
-    """Escaneia redes Wi-Fi disponíveis"""
+    """Lista redes do cache. Use ?refresh=1 para escanear (derruba AP ~20–40 s e religa)."""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'}), 401
 
-    try:
-        result = subprocess.run(['sudo', 'python3', 'wifi_manager.py', 'scan'],
-                                capture_output=True, text=True, timeout=15)
+    refresh = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
 
-        networks = []
-        for line in result.stdout.strip().split('\n'):
-            if 'SSID:' in line:
-                parts = line.split(',')
-                ssid = parts[0].replace('SSID:', '').strip()
-                signal = parts[1].replace('Sinal:', '').replace('%', '').strip() if len(parts) > 1 else '0'
-                security = parts[2].replace('Segurança:', '').strip() if len(parts) > 2 else 'Aberta'
+    if refresh:
+        if not _SCAN_LOCK.acquire(blocking=False):
+            return jsonify({
+                'success': True,
+                'pending': True,
+                'message': (
+                    'Já existe uma busca em andamento. Aguarde e toque em Atualizar de novo.'
+                ),
+            })
 
-                networks.append({
-                    'ssid': ssid,
-                    'signal': int(signal) if signal.isdigit() else 0,
-                    'security': security
-                })
+        def worker():
+            try:
+                _run_scan_cache_subprocess()
+            finally:
+                _SCAN_LOCK.release()
 
-        return jsonify({'success': True, 'networks': networks})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        threading.Thread(target=worker, daemon=True).start()
+        return jsonify({
+            'success': True,
+            'pending': True,
+            'message': (
+                'O Wi-Fi da impressora será reiniciado por cerca de 20–40 s. '
+                'Reconecte à rede "Croma-3D-Printer" e aguarde a lista aparecer.'
+            ),
+        })
+
+    networks, ts, err = _read_wifi_cache()
+    body = {
+        'success': True,
+        'networks': networks,
+        'from_cache': ts is not None,
+        'cache_ts': ts,
+    }
+    if err:
+        body['cache_error'] = err
+    return jsonify(body)
 
 
 @wifi_bp.route('/api/wifi/connect', methods=['POST'])

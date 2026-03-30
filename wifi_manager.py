@@ -5,6 +5,7 @@ Gerenciador de Wi-Fi para Raspberry Pi
 - Permite configurar novas redes
 """
 
+import json
 import subprocess
 import time
 import os
@@ -14,6 +15,29 @@ HOTSPOT_SSID = "Croma-3D-Printer"
 HOTSPOT_PASSWORD = "croma1234"
 HOTSPOT_IP = "10.0.0.1"
 CHECK_INTERVAL = 30  # segundos
+
+# Lock: monitor não mexe no hotspot enquanto escaneamos com NM.
+SCAN_LOCK_PATH = "/run/chromasistem-wifi-scan.lock"
+WIFI_CACHE_PATH = "/run/chromasistem-wifi-cache.json"
+
+
+def scan_lock_acquire():
+    try:
+        with open(SCAN_LOCK_PATH, "w") as f:
+            f.write(str(os.getpid()))
+    except OSError as e:
+        print(f"Aviso: não foi possível criar lock de scan: {e}")
+
+
+def scan_lock_release():
+    try:
+        os.remove(SCAN_LOCK_PATH)
+    except OSError:
+        pass
+
+
+def scan_lock_held():
+    return os.path.isfile(SCAN_LOCK_PATH)
 
 
 def run_command(cmd):
@@ -175,25 +199,113 @@ def connect_wifi(ssid, password):
         start_hotspot()
         return False
 
-def scan_networks():
-    """Escaneia redes Wi-Fi disponíveis"""
-    success, output, _ = run_command("sudo nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list")
-    
-    if not success:
-        return []
-    
+def _include_ap_for_printer_24ghz(band: str, chan: str) -> bool:
+    """Exclui 5/6 GHz quando detectável; mantém desconhecido (TIM / dual-band)."""
+    b = (band or "").strip().lower()
+    ch = str(chan or "").strip()
+    try:
+        c = int(ch) if ch.isdigit() else None
+    except ValueError:
+        c = None
+    if c is not None and c > 14:
+        return False
+    if b in ("a",):  # NetworkManager: frequentemente só 5 GHz
+        return False
+    if "6ghz" in b or b == "6":
+        return False
+    return True
+
+
+def _parse_nmcli_wifi_tab(output: str):
+    """Parse saída nmcli -m tab (SSID pode conter ':')."""
     networks = []
-    for line in output.strip().split('\n'):
-        if line:
-            parts = line.split(':')
-            if len(parts) >= 3:
-                networks.append({
-                    'ssid': parts[0],
-                    'signal': parts[1],
-                    'security': parts[2]
-                })
-    
-    return networks
+    for line in output.strip().split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        ssid, sig, sec = parts[0], parts[1], parts[2]
+        band = parts[3] if len(parts) > 3 else ""
+        chan = parts[4] if len(parts) > 4 else ""
+        if not ssid or ssid == "--":
+            continue
+        if not _include_ap_for_printer_24ghz(band, chan):
+            continue
+        try:
+            signal = int(sig) if str(sig).strip().lstrip("-").isdigit() else 0
+        except ValueError:
+            signal = 0
+        networks.append({
+            "ssid": ssid,
+            "signal": signal,
+            "security": sec or "—",
+            "band": band or "",
+            "chan": chan or "",
+        })
+    # Mesmo SSID em 2.4 e 5: fica o de maior sinal entre os já filtrados
+    best = {}
+    for n in networks:
+        sid = n["ssid"]
+        if sid not in best or n["signal"] > best[sid]["signal"]:
+            best[sid] = n
+    out = list(best.values())
+    out.sort(key=lambda x: x["signal"], reverse=True)
+    return out
+
+
+def _nmcli_wifi_list_tab():
+    cmd = (
+        "sudo nmcli -m tab -t -f SSID,SIGNAL,SECURITY,BAND,CHAN device wifi list"
+    )
+    ok, out, _ = run_command(cmd)
+    if ok and out.strip():
+        return out
+    ok, out, _ = run_command(
+        "sudo nmcli -m tab -t -f SSID,SIGNAL,SECURITY device wifi list"
+    )
+    return out if ok else ""
+
+
+def scan_networks():
+    """Escaneia redes (NetworkManager precisa estar ativo)."""
+    return _parse_nmcli_wifi_tab(_nmcli_wifi_list_tab())
+
+
+def scan_to_cache():
+    """Para o AP, escaneia com NM, grava JSON e religa o hotspot (uso pelo painel web)."""
+    scan_lock_acquire()
+    try:
+        print("scan-cache: parando hotspot e escaneando…")
+        stop_hotspot()
+        time.sleep(2)
+        run_command("sudo nmcli radio wifi on")
+        run_command("sudo nmcli dev wifi rescan 2>/dev/null || true")
+        time.sleep(6)
+        raw = _nmcli_wifi_list_tab()
+        networks = _parse_nmcli_wifi_tab(raw)
+        payload = {
+            "networks": [
+                {"ssid": n["ssid"], "signal": n["signal"], "security": n["security"]}
+                for n in networks
+            ],
+            "ts": time.time(),
+        }
+        with open(WIFI_CACHE_PATH, "w") as f:
+            json.dump(payload, f)
+        print(f"✓ scan-cache: {len(networks)} redes (2,4 GHz / sem 5 GHz detectável)")
+    except Exception as e:
+        print(f"✗ scan-cache: {e}")
+        try:
+            with open(WIFI_CACHE_PATH, "w") as f:
+                json.dump({"networks": [], "ts": time.time(), "error": str(e)}, f)
+        except OSError:
+            pass
+    finally:
+        print("scan-cache: religando hotspot…")
+        if not start_hotspot():
+            print("✗ Falha ao religar hotspot após scan")
+        scan_lock_release()
 
 def get_saved_networks():
     """Retorna redes salvas"""
@@ -219,9 +331,13 @@ def forget_network(ssid):
 def monitor_connection():
     """Monitor de conexão - inicia hotspot se desconectar"""
     hotspot_active = False
-    
+
     while True:
         try:
+            if scan_lock_held():
+                time.sleep(3)
+                continue
+
             wifi_connected = check_wifi_connected()
             current_ssid = get_current_ssid()
             
@@ -269,12 +385,20 @@ if __name__ == "__main__":
         elif cmd == "scan":
             networks = scan_networks()
             for net in networks:
-                print(f"SSID: {net['ssid']}, Sinal: {net['signal']}%, Segurança: {net['security']}")
+                print(
+                    f"SSID: {net['ssid']}, Sinal: {net['signal']}%, "
+                    f"Segurança: {net['security']}"
+                )
+        elif cmd == "scan-cache":
+            scan_to_cache()
         elif cmd == "connect" and len(sys.argv) >= 4:
             ssid = sys.argv[2]
             password = sys.argv[3]
             connect_wifi(ssid, password)
         else:
-            print("Uso: wifi_manager.py [start|stop|monitor|scan|connect SSID PASSWORD]")
+            print(
+                "Uso: wifi_manager.py "
+                "[start|stop|monitor|scan|scan-cache|connect SSID PASSWORD]"
+            )
     else:
         monitor_connection()

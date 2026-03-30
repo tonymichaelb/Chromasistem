@@ -117,9 +117,37 @@ export function useWifi(): UseWifiReturn {
     setScanning(true)
     setAvailableNetworks([])
     try {
-      const data = await api<{ success: boolean; networks?: ScannedNetwork[] }>("/api/wifi/scan")
-      if (data.success && Array.isArray(data.networks)) setAvailableNetworks(data.networks)
-      else setAvailableNetworks([])
+      const start = await api<{
+        success: boolean
+        pending?: boolean
+        message?: string
+      }>("/api/wifi/scan?refresh=1")
+      if (!start.success) {
+        showNotification("Não foi possível iniciar a busca de redes.", "error")
+        return
+      }
+      if (start.message) {
+        showNotification(start.message, "info")
+      }
+      const deadline = Date.now() + 90_000
+      let found: ScannedNetwork[] = []
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2500))
+        const data = await api<{ success: boolean; networks?: ScannedNetwork[] }>("/api/wifi/scan")
+        if (data.success && Array.isArray(data.networks) && data.networks.length > 0) {
+          found = data.networks
+          break
+        }
+      }
+      setAvailableNetworks(found)
+      if (found.length === 0) {
+        showNotification(
+          'Nenhuma rede listada. Reconecte em "Croma-3D-Printer" e toque em Atualizar de novo.',
+          "error",
+        )
+      } else {
+        showNotification("Redes encontradas.", "success")
+      }
     } catch {
       setAvailableNetworks([])
       showNotification("Erro ao escanear redes", "error")
