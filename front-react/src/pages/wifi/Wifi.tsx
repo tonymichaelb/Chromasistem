@@ -189,7 +189,14 @@ export function Wifi() {
         {/* Redes disponíveis */}
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Redes disponíveis</CardTitle>
+            <div className="space-y-1">
+              <CardTitle>Redes disponíveis</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Ao atualizar, o Wi-Fi da impressora reinicia ~20–40 s. Reconecte em
+                &quot;Croma-3D-Printer&quot; e aguarde a lista (redes 2,4 GHz; 5 GHz
+                ocultas quando o sistema detecta a banda).
+              </p>
+            </div>
             <Button
               onClick={scanNetworks}
               disabled={scanning}
@@ -206,7 +213,8 @@ export function Wifi() {
               </p>
             ) : scanning ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Escaneando redes…
+                Buscando redes… se o Wi-Fi cair, reconecte em
+                &quot;Croma-3D-Printer&quot; e aguarde.
               </p>
             ) : availableNetworks.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">

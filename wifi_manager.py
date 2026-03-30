@@ -40,6 +40,20 @@ def scan_lock_held():
     return os.path.isfile(SCAN_LOCK_PATH)
 
 
+def scan_lock_stale(max_age_sec=180):
+    """Remove lock antigo se o scan-cache travou no meio."""
+    if not scan_lock_held():
+        return False
+    try:
+        if time.time() - os.path.getmtime(SCAN_LOCK_PATH) > max_age_sec:
+            scan_lock_release()
+            return True
+    except OSError:
+        scan_lock_release()
+        return True
+    return False
+
+
 def run_command(cmd):
     """Executa comando shell"""
     try:
@@ -233,8 +247,8 @@ def _parse_nmcli_wifi_tab(output: str):
         if not _include_ap_for_printer_24ghz(band, chan):
             continue
         try:
-            signal = int(sig) if str(sig).strip().lstrip("-").isdigit() else 0
-        except ValueError:
+            signal = int(float(sig))
+        except (ValueError, TypeError):
             signal = 0
         networks.append({
             "ssid": ssid,
@@ -335,8 +349,11 @@ def monitor_connection():
     while True:
         try:
             if scan_lock_held():
-                time.sleep(3)
-                continue
+                if scan_lock_stale():
+                    pass
+                else:
+                    time.sleep(3)
+                    continue
 
             wifi_connected = check_wifi_connected()
             current_ssid = get_current_ssid()
