@@ -169,10 +169,142 @@ def disconnect_printer():
         st.printer_serial = None
 
 
+def _truncate_cmd(cmd: str, max_len: int = 76) -> str:
+    s = cmd.strip()
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - 2] + "…"
+
+
+def _resp_preview(full_resp: str, max_len: int = 96) -> str:
+    preview = full_resp.replace("\n", " │ ")
+    if len(preview) > max_len:
+        return preview[: max_len - 1] + "…"
+    return preview
+
+
+def describe_gcode(cmd_line: str) -> str:
+    """Breve descrição em PT-BR do efeito do comando G-code (para logs)."""
+    raw = (cmd_line or "").split(";")[0].strip()
+    if not raw:
+        return "—"
+    parts = raw.upper().split()
+    head = parts[0] if parts else ""
+
+    def num_after(prefix: str):
+        for p in parts:
+            if p.startswith(prefix):
+                try:
+                    return int(float(p[len(prefix) :]))
+                except ValueError:
+                    try:
+                        return float(p[len(prefix) :])
+                    except ValueError:
+                        pass
+        return None
+
+    if re.match(r"^T\d+$", head):
+        return f"Selecionar extrusora {head[1:]}"
+
+    if head == "G20":
+        return "Unidades: polegadas"
+    if head == "G21":
+        return "Unidades: milímetros"
+    if head == "G28":
+        return "Homing (referência dos eixos)"
+    if head == "G29":
+        return "Nivelamento automático da mesa (mesh)"
+    if head == "G90":
+        return "Posicionamento absoluto"
+    if head == "G91":
+        return "Posicionamento relativo"
+    if head.startswith("G4"):
+        s = num_after("S")
+        if s is not None:
+            ss = int(s) if float(s) == int(float(s)) else s
+            return f"Pausa na sequência (dwell {ss} s)"
+        p = num_after("P")
+        if p is not None:
+            return f"Pausa na sequência (dwell {p} ms)"
+        return "Pausa na sequência (dwell)"
+
+    ru = raw.upper()
+    if head.startswith("G0") or (head == "G0" and len(parts) > 1):
+        return _describe_move(ru, rapid=True)
+    if head.startswith("G1") or (head == "G1" and len(parts) > 1):
+        return _describe_move(ru, rapid=False)
+
+    if head == "M104":
+        t = num_after("S")
+        return (
+            f"Definir temperatura do bico (sem aguardar){f' → {t}°C' if t is not None else ''}"
+        )
+    if head == "M109":
+        t = num_after("S")
+        return f"Aquecer bico e aguardar temperatura{f' → {t}°C' if t is not None else ''}"
+    if head == "M140":
+        t = num_after("S")
+        return (
+            f"Definir temperatura da mesa (sem aguardar){f' → {t}°C' if t is not None else ''}"
+        )
+    if head == "M190":
+        t = num_after("S")
+        return f"Aquecer mesa e aguardar temperatura{f' → {t}°C' if t is not None else ''}"
+    if head == "M105":
+        return "Ler temperaturas (bico e mesa)"
+    if head == "M115":
+        return "Informações do firmware"
+    if head == "M114":
+        return "Ler posição atual dos eixos"
+    if head == "M119":
+        return "Ler fim de curso"
+    if head == "M106":
+        return "Ligar ventoinha de arrefecimento"
+    if head == "M107":
+        return "Desligar ventoinha"
+    if head == "M600":
+        return "Troca de filamento (M600)"
+    if head == "M84":
+        return "Desligar motores (inativo)"
+    if head == "M82":
+        return "Extrusão em modo absoluto"
+    if head == "M83":
+        return "Extrusão em modo relativo"
+    if head == "M201":
+        return "Limites de aceleração (M201)"
+    if head == "M203":
+        return "Velocidades máximas dos eixos (M203)"
+    if head == "M204":
+        return "Aceleração P/R/T (M204)"
+    if head == "M205":
+        return "Jerk (M205)"
+    if head.startswith("M"):
+        return f"Comando auxiliar {head}"
+
+    if head.startswith("G"):
+        return f"Comando de movimento {head}"
+
+    return "G-code"
+
+
+def _describe_move(u: str, rapid: bool) -> str:
+    has_e = bool(re.search(r"\bE[-\d.]+", u))
+    axes = []
+    for ax in ("X", "Y", "Z"):
+        if ax + ":" in u or re.search(rf"\b{ax}[-\d.]+", u):
+            axes.append(ax)
+    if has_e:
+        axes.append("extrusão")
+    base = "Movimento rápido (G0)" if rapid else "Movimento linear (G1)"
+    if axes:
+        return f"{base}: {', '.join(axes)}"
+    return base
+
+
 def check_printer_ready():
     """Envia M115 (firmware info) e verifica se impressora responde ok"""
     try:
-        print("  🔍 Verificando se impressora está pronta...")
+        print("  Verificando impressora (M115)...")
         response = send_gcode('M115', wait_for_ok=True, timeout=10)
         if response and 'ok' in response.lower():
             print("  ✓ Impressora pronta para imprimir")
@@ -221,8 +353,9 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                         pass
                     time.sleep(0.01)
 
-                # Log de envio de G-code (sempre que mandamos algo para a impressora)
-                print(f"➡️  GCODE SEND ({timeout:.0f}s): {command.strip()}")
+                desc = describe_gcode(command)
+                cmd_show = _truncate_cmd(command.strip())
+                print(f"➡️  [{timeout:.0f}s] {desc} → {cmd_show}")
                 st.printer_serial.write(command.encode())
                 st.printer_serial.flush()
 
@@ -234,7 +367,7 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                     })
 
                 if not wait_for_ok:
-                    print("⬅️  GCODE RESP (no-wait): ok")
+                    print("   ← ok (sem aguardar resposta)")
                     return 'ok'
 
                 responses = []
@@ -261,32 +394,31 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                                         'command': full_resp,
                                         'type': 'response'
                                     })
-                                # Log consolidado da resposta (primeiras ~120 chars)
-                                preview = full_resp.replace('\n', ' | ')
-                                if len(preview) > 120:
-                                    preview = preview[:117] + '...'
-                                print(f"⬅️  GCODE RESP OK: {preview}")
+                                print("   ← ok")
                                 return full_resp
                     else:
                         time.sleep(0.01)
 
                 if attempt < retries - 1:
-                    print(f"  ⚠️ Timeout ao enviar '{command.strip()}', tentando novamente ({attempt + 2}/{retries})...")
+                    print(
+                        f"   ⚠ timeout ({timeout:.0f}s) · nova tentativa "
+                        f"{attempt + 2}/{retries} · {describe_gcode(command)}"
+                    )
                     time.sleep(0.5)
                     continue
 
                 if responses:
                     full_resp = '\n'.join(responses)
-                    preview = full_resp.replace('\n', ' | ')
-                    if len(preview) > 120:
-                        preview = preview[:117] + '...'
-                    print(f"⬅️  GCODE RESP (sem ok): {preview}")
+                    print(f"   ← sem linha 'ok' ({timeout:.0f}s) · {_resp_preview(full_resp)}")
                     return full_resp
                 else:
-                    print(f"  ⚠️ Nenhuma resposta para '{command.strip()}' (timeout {timeout:.0f}s)")
+                    print(
+                        f"   ✗ sem resposta ({timeout:.0f}s) · {describe_gcode(command)} "
+                        f"→ {_truncate_cmd(command.strip(), 60)}"
+                    )
                     return None
             except (OSError, serial.SerialException) as e:
-                print(f"Erro ao enviar comando '{command.strip()}': {e}")
+                print(f"   ✗ serial · {describe_gcode(command)} — {e}")
                 try:
                     if st.printer_serial:
                         st.printer_serial.close()
@@ -296,10 +428,13 @@ def send_gcode(command, wait_for_ok=True, timeout=None, retries=1):
                 return None
             except Exception as e:
                 if attempt < retries - 1:
-                    print(f"  ⚠️ Erro ao enviar '{command.strip()}': {e}, tentando novamente ({attempt + 2}/{retries})...")
+                    print(
+                        f"   ⚠ erro · {describe_gcode(command)} · "
+                        f"tentativa {attempt + 2}/{retries} — {e}"
+                    )
                     time.sleep(0.5)
                     continue
-                print(f"Erro ao enviar comando '{command.strip()}': {e}")
+                print(f"   ✗ {describe_gcode(command)} — {e}")
                 return None
 
         return None

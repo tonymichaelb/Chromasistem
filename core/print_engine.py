@@ -60,15 +60,13 @@ def run_print_job(filepath, original_name, job_id):
 
         time.sleep(0.1)
 
-        print("  🛠️ Enviando comandos de inicialização...")
+        print("  Inicialização: G21 + G90…")
         if not send_gcode('G21', retries=3):
             print("✗ Falha no G21")
             return
         if not send_gcode('G90', retries=3):
             print("✗ Falha no G90")
             return
-
-        print("  Comandos de inicialização enviados")
 
         with open(filepath, 'r') as f:
             total_lines = sum(1 for line in f if line.split(';')[0].strip())
@@ -262,24 +260,16 @@ def run_print_job(filepath, original_name, job_id):
 
                 if cmd_upper.startswith('G28'):
                     if st.g28_executed:
-                        print("⏭️  Pulando G28 (já foi executado)")
+                        print("  ⏭ pulando G28 (já executado)")
                         line_count += 1
                         continue
                     st.g28_executed = True
-                    print("  🏠 Executando homing (G28)... pode levar até 60 segundos")
                 elif cmd_upper.startswith('G29'):
                     if st.g29_executed:
-                        print("⏭️  Pulando G29 (já foi executado)")
+                        print("  ⏭ pulando G29 (já executado)")
                         line_count += 1
                         continue
                     st.g29_executed = True
-                    print("  📐 Executando nivelamento de mesa (G29)... pode levar até 2 minutos")
-                elif cmd_upper.startswith('M109'):
-                    print("  🔥 Aquecendo bico e aguardando temperatura...")
-                elif cmd_upper.startswith('M190'):
-                    print("  🔥 Aquecendo mesa e aguardando temperatura...")
-                elif cmd_upper.startswith('T'):
-                    print(f"  🔧 Selecionando extrusora: {line}")
 
                 if any(cmd_upper.startswith(c) for c in SKIP_COMMANDS):
                     line_count += 1
